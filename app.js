@@ -552,5 +552,4 @@ function exportData() {
     link.click();
     document.body.removeChild(link);
 }
-
 window.onload = () => { showSection('templates'); };
