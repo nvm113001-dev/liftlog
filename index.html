@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LiftLog - Workout Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>💪 LiftLog</h1>
+        <nav>
+            <button onclick="showSection('templates')">Templates</button>
+            <button onclick="showSection('log')">Log Workout</button>
+            <button onclick="showSection('history')">History</button>
+            <button onclick="showSection('reports')">Reports</button>
+            <button onclick="showSection('import')">Import Data</button>
+        </nav>
+    </header>
+
+    <!-- Templates Section -->
+    <section id="templates-section" class="section">
+        <h2>Saved Templates</h2>
+        <button onclick="createNewTemplate()">+ New Template</button>
+        <div id="template-list"></div>
+    </section>
+
+    <!-- Edit Template Section (NEW) -->
+    <section id="edit-template-section" class="section" style="display: none;">
+        <h2 id="editing-template-name"></h2>
+        <button onclick="saveEditedTemplate()">Save Template Changes</button>
+        <button onclick="cancelEditTemplate()" style="background: #ff3b30;">Cancel</button>
+        
+        <div id="edit-template-content"></div>
+        <button onclick="addExerciseToTemplate()">+ Add Exercise to Template</button>
+    </section>
+
+    <!-- Log Workout Section -->
+   <section id="log-section" class="section" style="display: none;">
+    <h2>Today's Workout</h2>
+
+    <div id="template-picker-area" style="margin-bottom: 20px;">
+        <select id="template-select" style="width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px;">
+            <option value="">-- Choose a Template --</option>
+        </select>
+        <button onclick="startFromTemplate()" style="width: 100%; background: #007aff;">Start Selected Template</button>
+    </div>
+
+    <div id="active-workout"></div>
+
+    <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button onclick="finishWorkout()" style="flex: 2; background: #34c759;">Finish & Save</button>
+        <button onclick="cancelCurrentWorkout()" style="flex: 1; background: #8e8e93;">Cancel</button>
+    </div>
+</section>
+
+    <!-- History, Reports, Import sections remain the same as before -->
+
+    <section id="history-section" class="section" style="display: none;">
+        <h2>Workout History</h2>
+        <div id="workout-history"></div>
+    </section>
+
+<section id="reports-section" class="section" style="display: none; padding: 15px;">
+        <h2>Training Reports</h2>
+
+        <div class="tab-container">
+            <button id="tab-summary" class="report-tab tab-active" onclick="switchReportTab('summary')">
+                Summary
+            </button>
+            <button id="tab-exercises" class="report-tab tab-inactive" onclick="switchReportTab('exercises')">
+                Exercises
+            </button>
+        </div>
+
+        <div id="view-summary">
+            <div id="report-summary" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;"></div>
+            <h3>Workouts by Month</h3>
+            <div id="monthly-breakdown" style="background: #f9f9f9; padding: 15px; border-radius: 10px;"></div>
+        </div>
+
+        <div id="view-exercises" style="display: none;">
+            <h3>Lift Progression</h3>
+            <div id="exercise-breakdown-list"></div>
+        </div>
+    </section>
+
+    <section id="history-section" class="section" style="display: none; padding: 10px;">
+        <h2 style="margin-bottom: 15px;">Workout History</h2>
+
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+            <button onclick="filterHistory('')" style="width: auto; background: #8e8e93; padding: 10px 15px;">All</button>
+            <button onclick="filterHistory('Chest')" style="width: auto; background: #007aff; padding: 10px 15px;">Chest</button>
+            <button onclick="filterHistory('Back')" style="width: auto; background: #007aff; padding: 10px 15px;">Back</button>
+            <button onclick="filterHistory('Legs')" style="width: auto; background: #007aff; padding: 10px 15px;">Legs</button>
+        </div>
+
+        <input type="hidden" id="history-search" value="">
+        <div id="workout-history"></div>
+    </section>
+
+    <section id="import-section" class="section" style="display: none;">
+        <h2>Import Old Workouts</h2>
+        <p>Paste CSV or upload file</p>
+        <textarea id="csv-paste" rows="8" placeholder="Date,Exercise,MuscleGroup,SetNumber,Weight,Reps"></textarea>
+        <button onclick="pasteAndImport()">Import from Paste</button>
+        <input type="file" id="csv-file" accept=".csv" onchange="handleFileImport(event)" style="margin-top: 15px;">
+        <button onclick="clearAllData()" style="background: #ff3b30; margin-top: 30px;">Clear All Data</button>
+    </section>
+
+    <script src="app.js"></script>
+</body>
+</html>
