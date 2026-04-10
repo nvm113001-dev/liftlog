@@ -99,14 +99,33 @@
         <div id="workout-history"></div>
     </section>
 
-    <section id="import-section" class="section" style="display: none;">
-        <h2>Import Old Workouts</h2>
-        <p>Paste CSV or upload file</p>
-        <textarea id="csv-paste" rows="8" placeholder="Date,Exercise,MuscleGroup,SetNumber,Weight,Reps"></textarea>
-        <button onclick="pasteAndImport()">Import from Paste</button>
-        <input type="file" id="csv-file" accept=".csv" onchange="handleFileImport(event)" style="margin-top: 15px;">
-        <button onclick="clearAllData()" style="background: #ff3b30; margin-top: 30px;">Clear All Data</button>
-    </section>
+ <section id="import-section" class="section" style="display: none; padding: 15px;">
+    <h2>Data Management</h2>
+    
+    <div style="background: #eef2ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #d1d9ff;">
+        <h3 style="margin-top: 0; color: #4338ca;">Phone Sync & Backup</h3>
+        <p style="font-size: 0.8em; color: #666;">Use this to move data between devices (PC to iPhone).</p>
+        <button onclick="exportData()" style="background: #5856d6; width: 100%; margin-bottom: 10px;">📥 Download Backup (.json)</button>
+        
+        <label style="font-size: 0.75em; font-weight: bold; display: block; margin-bottom: 5px;">IMPORT BACKUP FILE:</label>
+        <input type="file" id="import-file" accept=".json" onchange="handleImportFile(event)" 
+               style="width: 100%; padding: 8px; background: white; border-radius: 6px; border: 1px solid #ccc;">
+    </div>
+
+    <div style="background: #f9f9f9; padding: 15px; border-radius: 12px; border: 1px solid #eee;">
+        <h3 style="margin-top: 0;">Manual CSV Import</h3>
+        <p style="font-size: 0.8em; color: #666;">Paste rows from a spreadsheet here.</p>
+        <textarea id="csv-paste" rows="5" placeholder="Date,Exercise,MuscleGroup,SetNumber,Weight,Reps" 
+                  style="width: 100%; border: 1px solid #ccc; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 12px;"></textarea>
+        <button onclick="pasteAndImport()" style="width: 100%; margin-top: 10px; background: #8e8e93;">Import from Paste</button>
+        
+        <p style="text-align: center; margin: 10px 0; font-size: 0.8em; color: #999;">- OR -</p>
+        
+        <input type="file" id="csv-file" accept=".csv" onchange="handleFileImport(event)" style="width: 100%;">
+    </div>
+
+    <button onclick="clearAllData()" style="background: #ff3b30; margin-top: 40px; width: 100%; opacity: 0.6;">Clear All Device Data</button>
+</section>
 
     <script src="app.js"></script>
 </body>

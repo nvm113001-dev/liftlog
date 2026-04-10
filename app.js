@@ -483,4 +483,53 @@ function handleFileImport(e) {
     reader.readAsText(e.target.files[0]); 
 }
 
+function handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            
+            if (importedData.workouts) {
+                localStorage.setItem('workouts', JSON.stringify(importedData.workouts));
+                workouts = importedData.workouts; 
+            }
+            if (importedData.templates) {
+                localStorage.setItem('templates', JSON.stringify(importedData.templates));
+                templates = importedData.templates;
+            }
+            
+            alert("Success! Your PC history is now synced to this device.");
+            location.reload(); 
+        } catch (err) {
+            alert("Error: Invalid backup file.");
+        }
+    };
+    reader.readAsText(file);
+}
+
+function exportData() {
+    // 1. Grab everything from localStorage
+    const savedWorkouts = JSON.parse(localStorage.getItem('workouts')) || [];
+    const savedTemplates = JSON.parse(localStorage.getItem('templates')) || [];
+    
+    // 2. Combine them into one object
+    const backupData = {
+        workouts: savedWorkouts,
+        templates: savedTemplates,
+        exportDate: new Date().toISOString()
+    };
+    
+    // 3. Create the file and trigger the download
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "liftlog_backup.json");
+    document.body.appendChild(downloadAnchorNode); // Required for Firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
 window.onload = () => { showSection('templates'); };
