@@ -516,40 +516,50 @@ function handleImportFile(event) {
 }
 
 function exportData() {
-    // 1. Get the workouts from the computer's memory
     const savedWorkouts = JSON.parse(localStorage.getItem('workouts')) || [];
     
     if (savedWorkouts.length === 0) {
-        alert("No workouts found to export! Log a workout or import data first.");
+        alert("No workouts found to export!");
         return;
     }
 
-    // 2. Create the CSV Header (Matching your import format)
     let csvContent = "Date,Exercise,MuscleGroup,SetNumber,Weight,Reps\n";
 
-    // 3. Convert each workout object into a text row
-    savedWorkouts.forEach(w => {
-        const row = [
-            w.date,
-            `"${w.exercise}"`, // Quotes handle names with commas
-            w.muscleGroup,
-            w.setNumber,
-            w.weight,
-            w.reps
-        ].join(",");
-        csvContent += row + "\n";
+    savedWorkouts.forEach(workout => {
+        const date = workout.date || "";
+        
+        // Reach into the exercises array inside the workout
+        if (workout.exercises && Array.isArray(workout.exercises)) {
+            workout.exercises.forEach(ex => {
+                const exerciseName = ex.name || ex.exercise || "Unknown Exercise";
+                const muscle = ex.muscleGroup || ex.muscle || "";
+                
+                // Reach into the sets array inside the exercise
+                if (ex.sets && Array.isArray(ex.sets)) {
+                    ex.sets.forEach((set, index) => {
+                        const row = [
+                            date,
+                            `"${exerciseName}"`,
+                            muscle,
+                            set.setNumber || (index + 1),
+                            set.weight || "0",
+                            set.reps || "0"
+                        ].join(",");
+                        csvContent += row + "\n";
+                    });
+                }
+            });
+        }
     });
 
-    // 4. Create the "Download" link in the background
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", "liftlog_history.csv");
-    
-    // 5. Trigger the download and clean up
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
+
 window.onload = () => { showSection('templates'); };
