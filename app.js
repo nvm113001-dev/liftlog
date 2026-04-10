@@ -357,20 +357,43 @@ function deleteHistoryItem(i) { if(confirm("Delete?")) { workouts.splice(i, 1); 
 
 function processCSVRows(rows) {
     const grouped = {};
-    rows.forEach(row => {
+    rows.forEach((row, index) => {
+        // 1. SKIP HEADER: If it's the first line and mentions "Date", ignore it
+        if (index === 0 && row.toLowerCase().includes('date')) return;
+        
+        // 2. SKIP EMPTY LINES:
+        if (!row.trim()) return;
+
         const cols = row.split(',').map(c => c.trim());
         if (cols.length < 5) return;
-        let [dateStr, name, set, reps, weight] = cols;
+
+        let [dateStr, name, muscle, set, weight, reps] = cols; // Adjusted to match your 6-column CSV export
+
+        // 3. DATE VALIDATION: Ensure we aren't processing the header as a date
         const d = new Date(dateStr);
-        const date = !isNaN(d.getTime()) ? `${d.getFullYear() <= 2001 ? 2026 : d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : dateStr;
+        if (isNaN(d.getTime())) return; 
+
+        const date = `${d.getFullYear() <= 2001 ? 2026 : d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
         if (!grouped[date]) grouped[date] = { name: "Imported Workout", date: date, exercises: [] };
+        
         let ex = grouped[date].exercises.find(e => e.name === name);
-        if (!ex) { ex = { name: name, sets: [] }; grouped[date].exercises.push(ex); }
-        ex.sets.push({ weight: weight.toLowerCase()==='bw'?'BW':parseFloat(weight)||0, reps: parseInt(reps)||0 });
+        if (!ex) { 
+            ex = { name: name, muscleGroup: muscle || "", sets: [] }; 
+            grouped[date].exercises.push(ex); 
+        }
+
+        // Handle 'BW' or numbers for weight
+        const weightVal = weight.toLowerCase() === 'bw' ? 'BW' : parseFloat(weight) || 0;
+        ex.sets.push({ weight: weightVal, reps: parseInt(reps) || 0 });
     });
+
     Object.values(grouped).forEach(wk => workouts.unshift(wk));
-    saveWorkouts(); renderHistory(); alert("Imported!");
+    saveWorkouts(); 
+    renderHistory(); 
+    alert("Import Successful!");
 }
+
 
 // This function sets the "search" value and refreshes the list
 function filterHistory(category) {
