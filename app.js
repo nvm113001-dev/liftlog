@@ -515,4 +515,42 @@ function handleImportFile(event) {
     reader.readAsText(file);
 }
 
+function exportData() {
+    // 1. Get the workouts from the computer's memory
+    const savedWorkouts = JSON.parse(localStorage.getItem('workouts')) || [];
+    
+    if (savedWorkouts.length === 0) {
+        alert("No workouts found to export! Log a workout or import data first.");
+        return;
+    }
+
+    // 2. Create the CSV Header (Matching your import format)
+    let csvContent = "Date,Exercise,MuscleGroup,SetNumber,Weight,Reps\n";
+
+    // 3. Convert each workout object into a text row
+    savedWorkouts.forEach(w => {
+        const row = [
+            w.date,
+            `"${w.exercise}"`, // Quotes handle names with commas
+            w.muscleGroup,
+            w.setNumber,
+            w.weight,
+            w.reps
+        ].join(",");
+        csvContent += row + "\n";
+    });
+
+    // 4. Create the "Download" link in the background
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "liftlog_history.csv");
+    
+    // 5. Trigger the download and clean up
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 window.onload = () => { showSection('templates'); };
