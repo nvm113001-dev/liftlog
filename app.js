@@ -492,44 +492,27 @@ function handleImportFile(event) {
         try {
             const importedData = JSON.parse(e.target.result);
             
+            // Validate that it's a real LiftLog backup
+            if (!importedData.workouts && !importedData.templates) {
+                throw new Error("Invalid format");
+            }
+
+            // Save to the phone's storage
             if (importedData.workouts) {
                 localStorage.setItem('workouts', JSON.stringify(importedData.workouts));
-                workouts = importedData.workouts; 
             }
             if (importedData.templates) {
                 localStorage.setItem('templates', JSON.stringify(importedData.templates));
-                templates = importedData.templates;
             }
             
             alert("Success! Your PC history is now synced to this device.");
-            location.reload(); 
+            location.reload(); // This refreshes the page to show your data
         } catch (err) {
-            alert("Error: Invalid backup file.");
+            console.error(err);
+            alert("Error: This file is not a valid LiftLog backup. Make sure it's the .json file from your PC.");
         }
     };
     reader.readAsText(file);
-}
-
-function exportData() {
-    // 1. Grab everything from localStorage
-    const savedWorkouts = JSON.parse(localStorage.getItem('workouts')) || [];
-    const savedTemplates = JSON.parse(localStorage.getItem('templates')) || [];
-    
-    // 2. Combine them into one object
-    const backupData = {
-        workouts: savedWorkouts,
-        templates: savedTemplates,
-        exportDate: new Date().toISOString()
-    };
-    
-    // 3. Create the file and trigger the download
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "liftlog_backup.json");
-    document.body.appendChild(downloadAnchorNode); // Required for Firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
 }
 
 window.onload = () => { showSection('templates'); };
