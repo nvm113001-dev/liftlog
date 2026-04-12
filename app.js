@@ -326,7 +326,19 @@ function renderActiveWorkout() {
     currentWorkout.exercises.forEach((ex, exIdx) => {
         const div = document.createElement('div');
         div.className = 'exercise';
-        div.innerHTML = `<strong>${ex.name}</strong><div id="sets-${exIdx}"></div><button onclick="addSet(${exIdx})">+ Set</button>`;
+        
+        div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong style="font-size: 1.2em;">${ex.name}</strong>
+                <button onclick="removeExerciseFromActive(${exIdx})" 
+                        style="width: auto; background: #ff3b30; color: white; border: none; 
+                       font-size: 0.7em; padding: 4px 10px; border-radius: 12px; 
+                       cursor: pointer; font-weight: bold;">Delete</button>
+            </div>
+            <div id="sets-${exIdx}"></div>
+            <button onclick="addSet(${exIdx})">+ Set</button>
+        `;
+
         container.appendChild(div);
         const setsDiv = document.getElementById(`sets-${exIdx}`);
         ex.sets.forEach((set, setIdx) => {
@@ -738,6 +750,19 @@ function saveEditedTemplate() {
     showSection('templates');
     
     alert("Template updated!");
+}
+
+function removeExerciseFromActive(index) {
+    if (confirm("Are you sure you want to remove this exercise?")) {
+        // 1. Remove it from the current session
+        currentWorkout.exercises.splice(index, 1);
+        
+        // 2. Save the change to the backup immediately
+        localStorage.setItem('active_workout_backup', JSON.stringify(currentWorkout));
+        
+        // 3. Refresh the screen so it disappears
+        renderActiveWorkout();
+    }
 }
 
 window.onload = () => { 
