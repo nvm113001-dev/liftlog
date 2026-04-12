@@ -1,5 +1,6 @@
 let templates = JSON.parse(localStorage.getItem('templates')) || [];
 let workouts = JSON.parse(localStorage.getItem('workouts')) || [];
+let currentTemplateExercises = []; // This holds the list of exercises while you are building a new template
 let currentWorkout = null;
 let currentEditingTemplateIndex = -1;
 
@@ -19,14 +20,32 @@ function saveTemplates() { localStorage.setItem('templates', JSON.stringify(temp
 function saveWorkouts() { localStorage.setItem('workouts', JSON.stringify(workouts)); }
 
 function showSection(section) {
+    // 1. Hide all sections first
     document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+    
+    // 2. Show the requested section
     const target = document.getElementById(section + '-section');
     if (target) target.style.display = 'block';
     
-    // NEW: Trigger the report building
+    // 3. Section-specific logic
     if (section === 'reports') renderReports();
 
-    if (section === 'log') populateTemplateSelect();
+    if (section === 'log') {
+        const backup = localStorage.getItem('active_workout_backup');
+        const pickerArea = document.getElementById('template-picker-area');
+
+        if (backup || currentWorkout) {
+            // Hide the start buttons if we are mid-workout
+            if (pickerArea) pickerArea.style.display = 'none';
+            renderActiveWorkout();
+        } else {
+            // Show the start buttons if we are starting fresh
+            if (pickerArea) pickerArea.style.display = 'block';
+            document.getElementById('active-workout').innerHTML = '';
+            populateTemplateSelect();
+        }
+    }
+
     if (section === 'templates') renderTemplates();
     if (section === 'history') renderHistory();
 }
@@ -232,19 +251,28 @@ function renderTemplates() {
 }
 
 function cancelCurrentWorkout() {
-    // Check if there is actual data logged so you don't accidentally lose a whole workout
     const hasData = currentWorkout && currentWorkout.exercises.some(ex => 
         ex.sets.some(s => s.reps > 0 || s.weight > 0)
     );
 
-    if (hasData) {
-        if (!confirm("Are you sure? This will delete your progress for this session.")) {
-            return; // Exit if they click "No"
-        }
+    if (hasData && !confirm("Are you sure? This will delete your progress.")) {
+        return;
     }
 
-    // Reset and go back
+    // 1. Clear the storage
+    localStorage.removeItem('active_workout_backup');
+
+    // 2. Clear the variable
     currentWorkout = null;
+
+    // 3. WIPE THE HTML so the old workout isn't visible anymore
+    document.getElementById('active-workout').innerHTML = '';
+
+    // 4. SHOW THE PICKER so you can start a new one
+    const picker = document.getElementById('template-picker-area');
+    if (picker) picker.style.display = 'block';
+
+    // 5. Go back
     showSection('templates');
 }
 
@@ -253,10 +281,7 @@ function renameTemplate(idx) {
     if (name) { templates[idx].name = name; saveTemplates(); renderTemplates(); }
 }
 
-function editTemplate(idx) {
-    currentEditingTemplateIndex = idx;
-    showSection('edit-template');
-}
+
 
 function renderEditingTemplate() {
     const container = document.getElementById('edit-template-content');
@@ -306,50 +331,151 @@ function renderActiveWorkout() {
         const setsDiv = document.getElementById(`sets-${exIdx}`);
         ex.sets.forEach((set, setIdx) => {
             const row = document.createElement('div');
+            row.style.marginBottom = "8px"; // Adding a little breathing room between sets
             row.innerHTML = `
-                Set ${setIdx+1} 
-                <input type="text" value="${set.weight||''}" onchange="updateSet(${exIdx},${setIdx},'weight',this.value)" style="width:60px;"> 
-                <input type="number" value="${set.reps||''}" onchange="updateSet(${exIdx},${setIdx},'reps',this.value)" style="width:50px;">
-                <button onclick="removeSet(${exIdx},${setIdx})" style="width:auto; background:#ff3b30;">-</button>`;
-            setsDiv.appendChild(row);
+                <span style="font-size: 0.9em; color: #666; margin-right: 5px;">Set ${setIdx+1}</span>
+                <input type="text" placeholder="lbs" value="${set.weight||''}" 
+                       oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
+                       style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center;"> 
+                <input type="number" placeholder="reps" value="${set.reps||''}" 
+                       oninput="updateSet(${exIdx},${setIdx},'reps',this.value)" 
+                       style="width:55px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center;">
+                <button onclick="removeSet(${exIdx},${setIdx})" 
+                        style="width:auto; background:#ff3b30; padding: 8px 12px; margin-left: 5px;">-</button>
+             `;
+             setsDiv.appendChild(row);
         });
     });
+
+    // NEW: Add a button at the bottom to add a new exercise to this specific workout
+    const addExBtn = document.createElement('div');
+    addExBtn.innerHTML = `
+        <hr style="margin: 20px 0;">
+        <button onclick="addNewExerciseToActive()" style="width: 100%; background: #007aff; padding: 15px;">+ Add Exercise</button>
+    `;
+    container.appendChild(addExBtn);
+}
+
+function addNewExerciseToActive() {
+    const name = prompt("Enter exercise name:");
+    if (!name) return;
+    
+    currentWorkout.exercises.push({
+        name: name,
+        sets: [{reps: 0, weight: 0}] // Start with one empty set
+    });
+    
+    // Save to backup immediately so it's crash-proof
+    localStorage.setItem('active_workout_backup', JSON.stringify(currentWorkout));
+    
+    renderActiveWorkout();
 }
 
 function updateSet(e, s, f, v) { 
     if(f==='weight') currentWorkout.exercises[e].sets[s][f] = v.toLowerCase()==='bw' ? 'BW' : parseFloat(v)||0;
     else currentWorkout.exercises[e].sets[s][f] = parseInt(v)||0;
+    localStorage.setItem('active_workout_backup', JSON.stringify(currentWorkout));
 }
 function addSet(i) { currentWorkout.exercises[i].sets.push({reps:0, weight:0}); renderActiveWorkout(); }
 function removeSet(e, s) { currentWorkout.exercises[e].sets.splice(s, 1); renderActiveWorkout(); }
 
 function finishWorkout() {
-    if(confirm("Save workout?")) { workouts.unshift(currentWorkout); saveWorkouts(); currentWorkout = null; showSection('history'); }
+    if(confirm("Save workout?")) {
+        // 1. Add to history and save
+        workouts.unshift(currentWorkout);
+        saveWorkouts();
+
+        // 2. IMPORTANT: Wipe the temporary backup
+        localStorage.removeItem('active_workout_backup');
+
+        // 3. IMPORTANT: Reset the variable and the HTML
+        currentWorkout = null;
+        document.getElementById('active-workout').innerHTML = '';
+
+        // 4. Reset the picker visibility for next time
+        const picker = document.getElementById('template-picker-area');
+        if (picker) picker.style.display = 'block';
+
+        // 5. Go to history to see the result
+        showSection('history');
+    }
 }
 
-function renderHistory() {
-    const container = document.getElementById('workout-history');
-    const searchInput = document.getElementById('history-search');
-    const term = searchInput ? searchInput.value.toLowerCase() : "";
+function startEmptyWorkout() {
+    // 1. Ask for the workout name right away
+    let workoutName = prompt("Enter a name for this workout:", "New Workout");
+    
+    // 2. If they hit cancel, don't start the workout at all
+    if (workoutName === null) return; 
+
+    // 3. Fallback to "New Workout" if they leave it blank
+    if (workoutName.trim() === "") workoutName = "New Workout";
+
+    const d = new Date();
+    currentWorkout = {
+        name: workoutName,
+        date: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
+        exercises: []
+    };
+    
+    // 4. Save to backup immediately in case of refresh
+    localStorage.setItem('active_workout_backup', JSON.stringify(currentWorkout));
+
+    document.getElementById('template-picker-area').style.display = 'none';
+    renderActiveWorkout();
+}
+
+function addExerciseToTemplate() {
+    const nameInput = document.getElementById('template-exercise-name');
+    const muscleInput = document.getElementById('template-exercise-muscle');
+
+    const name = nameInput.value.trim();
+    const muscle = muscleInput.value.trim();
+
+    if (!name) {
+        alert("Please enter an exercise name.");
+        return;
+    }
+
+    // Add to our temporary array for the template being built
+    currentTemplateExercises.push({
+        name: name,
+        muscleGroup: muscle,
+        sets: [] // Templates start with empty sets to be filled during workout
+    });
+
+    // Clear inputs for the next exercise
+    nameInput.value = '';
+    muscleInput.value = '';
+
+    // Refresh the little list showing what's in the template so far
+    renderTemplateExerciseList();
+}
+
+function renderTemplateExerciseList() {
+    const container = document.getElementById('template-exercises-list');
     if (!container) return;
 
-    workouts.sort((a, b) => b.date.localeCompare(a.date));
-    const filtered = workouts.filter(wk => wk.name.toLowerCase().includes(term) || wk.exercises.some(ex => ex.name.toLowerCase().includes(term)));
+    container.innerHTML = currentTemplateExercises.map((ex, index) => `
+        <div style="display: flex; justify-content: space-between; background: #fff; padding: 10px; margin-bottom: 5px; border-radius: 5px; border: 1px solid #eee;">
+            <span><strong>${ex.name}</strong> (${ex.muscleGroup || 'General'})</span>
+            <button onclick="removeExerciseFromNewTemplate(${index})" style="background: none; color: #ff3b30; width: auto; padding: 0; border: none;">✕</button>
+        </div>
+    `).join('');
+}
 
-    container.innerHTML = '';
-    filtered.forEach((wk) => {
-        const idx = workouts.indexOf(wk);
-        const div = document.createElement('div');
-        div.className = 'exercise';
-        div.style.borderLeft = "5px solid #34c759";
-        const exHTML = wk.exercises.map(ex => `<div><strong>${ex.name}</strong>: <small>${ex.sets.map(s => s.weight + 'x' + s.reps).join(', ')}</small></div>`).join('');
-        div.innerHTML = `
-            <div style="display:flex; justify-content:space-between;">
-                <div><h3 onclick="renameHistoryItem(${idx})" style="color:#007aff; cursor:pointer; margin:0;">${wk.name} ✏️</h3><small>${wk.date}</small></div>
-                <button onclick="deleteHistoryItem(${idx})" style="background:none; color:#ff3b30; border:none; width:auto;">Delete</button>
-            </div><hr>${exHTML}`;
-        container.appendChild(div);
-    });
+// Helper to remove exercises from the list before you hit "Save"
+function removeExerciseFromNewTemplate(index) {
+    currentTemplateExercises.splice(index, 1);
+    renderTemplateExerciseList();
+}
+
+function deleteTemplate(idx) {
+    if (confirm("Are you sure you want to delete this template?")) {
+        templates.splice(idx, 1);
+        saveTemplates();
+        renderTemplates();
+    }
 }
 
 function renameHistoryItem(i) { const n = prompt("Rename:", workouts[i].name); if(n) { workouts[i].name = n; saveWorkouts(); renderHistory(); } }
@@ -585,4 +711,51 @@ function exportData() {
     document.body.removeChild(link);
 }
 
-window.onload = () => { showSection('templates'); };
+function editTemplate(idx) {
+    currentEditingTemplateIndex = idx;
+    
+    // 1. Load the existing exercises into our temporary builder list
+    currentTemplateExercises = [...templates[idx].exercises];
+    
+    // 2. Refresh the visual list so you can see them immediately
+    renderTemplateExerciseList();
+    
+    // 3. Update the header and show the section
+    document.getElementById('editing-template-name').innerText = "Editing: " + templates[idx].name;
+    showSection('edit-template');
+}
+
+function saveEditedTemplate() {
+    if (currentEditingTemplateIndex === -1) return;
+
+    // Save the builder list back to the main template
+    templates[currentEditingTemplateIndex].exercises = [...currentTemplateExercises];
+
+    // Clear everything out for next time
+    currentTemplateExercises = [];
+    saveTemplates();
+    renderTemplates();
+    showSection('templates');
+    
+    alert("Template updated!");
+}
+
+window.onload = () => { 
+    const backup = localStorage.getItem('active_workout_backup');
+    
+    if (backup) {
+        // 1. Load the data back into our active variable
+        currentWorkout = JSON.parse(backup);
+        
+        // 2. Show the logging screen
+        showSection('log');
+        
+        // 3. Re-draw the workout on the screen
+        renderActiveWorkout();
+        
+        console.log("Workout resumed from backup.");
+    } else {
+        // If no backup, just show the home screen
+        showSection('templates');
+    }
+};

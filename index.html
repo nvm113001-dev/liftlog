@@ -27,12 +27,24 @@
 
     <!-- Edit Template Section (NEW) -->
     <section id="edit-template-section" class="section" style="display: none;">
-        <h2 id="editing-template-name"></h2>
-        <button onclick="saveEditedTemplate()">Save Template Changes</button>
-        <button onclick="cancelEditTemplate()" style="background: #ff3b30;">Cancel</button>
+        <h2 id="editing-template-name">Edit Template</h2>
+        
+        <div style="background: #f4f4f4; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ddd;">
+            <h4 style="margin-top: 0;">Add New Exercise</h4>
+            <input type="text" id="template-exercise-name" placeholder="Exercise Name (e.g. Bench Press)" style="width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
+            <input type="text" id="template-exercise-muscle" placeholder="Muscle Group (e.g. Chest)" style="width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
+            <button onclick="addExerciseToTemplate()" style="width: 100%; background: #007aff;">+ Add to List</button>
+        </div>
+
+        <h3>Exercises in this Template:</h3>
+        <div id="template-exercises-list" style="margin-bottom: 20px;"></div>
         
         <div id="edit-template-content"></div>
-        <button onclick="addExerciseToTemplate()">+ Add Exercise to Template</button>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="saveEditedTemplate()" style="flex: 2; background: #34c759;">Save Template Changes</button>
+            <button onclick="cancelEditTemplate()" style="flex: 1; background: #ff3b30;">Cancel</button>
+        </div>
     </section>
 
     <!-- Log Workout Section -->
@@ -44,6 +56,7 @@
             <option value="">-- Choose a Template --</option>
         </select>
         <button onclick="startFromTemplate()" style="width: 100%; background: #007aff;">Start Selected Template</button>
+        <button onclick="startEmptyWorkout()" style="width: 100%; margin-top: 10px; background: #5856d6;">Start New Workout</button>
     </div>
 
     <div id="active-workout"></div>
