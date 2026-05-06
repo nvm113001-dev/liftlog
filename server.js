@@ -353,69 +353,7 @@ app.post('/save-templates', authenticateToken, (req, res) => {
     }
 });
 
-// ==================== 45-DAY ESTIMATED 1RM (server-side) ====================
 
-const STATS_FILE = '/mnt/liftlog_data/liftlog/exercise_stats.json';
-
-// Load stats (with fallback to empty object)
-let exerciseStats = {};
-try {
-    if (require('fs').existsSync(STATS_FILE)) {
-        exerciseStats = JSON.parse(require('fs').readFileSync(STATS_FILE, 'utf8'));
-    }
-} catch (e) {}
-
-// Calculate 1RM from ALL sets in last 45 days (runs once per exercise)
-function calculateEstimatedOneRM(exerciseName) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 45);
-
-    let totalWeight = 0;
-    let totalReps = 0;
-    let setCount = 0;
-
-    // `workouts` is already loaded in your server.js
-    workouts.forEach(workout => {
-        const workoutDate = new Date(workout.date);
-        if (workoutDate < cutoff) return;
-
-        const match = workout.exercises?.find(ex => ex.name === exerciseName);
-        if (match && match.sets) {
-            match.sets.forEach(set => {
-                const w = parseFloat(set.weight);
-                const r = parseInt(set.reps);
-                if (w && r > 0) {
-                    totalWeight += w;
-                    totalReps += r;
-                    setCount++;
-                }
-            });
-        }
-    });
-
-    if (setCount === 0) return null;
-
-    const avgWeight = totalWeight / setCount;
-    const avgReps   = totalReps / setCount;
-
-    const oneRM = avgWeight * (1 + avgReps / 30);
-    return Math.round(oneRM);
-}
-
-// Update stats for all exercises in a newly saved workout
-function updateExerciseStatsForWorkout(savedWorkout) {
-    if (!savedWorkout.exercises) return;
-
-    savedWorkout.exercises.forEach(ex => {
-        const newOneRM = calculateEstimatedOneRM(ex.name);
-        if (newOneRM) {
-            exerciseStats[ex.name] = newOneRM;
-        }
-    });
-
-    // Save to disk
-    require('fs').writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
-}
 
 // GET current 1RM stats for the frontend
 app.get('/exercise_stats', (req, res) => {
