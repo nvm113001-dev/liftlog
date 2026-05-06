@@ -452,37 +452,21 @@ function normalizeWatchMetrics(wk) {
     };
 }
 
-// ==================== NEW HELPER FUNCTIONS (add these near the top with other helpers) ====================
+// ==================== SERVER-SIDE 45-DAY 1RM (client only reads the stats) ====================
 
-// Epley 1RM formula + suggestion for target reps
-function calculateSuggestedWeight(previousWeight, previousReps, targetReps) {
-    if (!previousWeight || !previousReps || previousReps <= 0) return null;
-    const oneRM = previousWeight * (1 + previousReps / 30);
-    const suggested = oneRM * (1 - (targetReps * 0.025));
-    return Math.round(suggested);   // nearest whole number
-}
+let exerciseStats = {};
 
-// Get last workout history + rounded averages
-function getLastWorkoutForExercise(exerciseName) {
-    if (!workouts || !currentWorkout) return null;
-    const past = workouts
-        .filter(w => w.date < currentWorkout.date)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    for (const workout of past) {
-        const match = workout.exercises?.find(ex => ex.name === exerciseName);
-        if (match && match.sets && match.sets.length > 0) {
-            const totalWeight = match.sets.reduce((sum, s) => sum + (parseFloat(s.weight) || 0), 0);
-            const totalReps   = match.sets.reduce((sum, s) => sum + (parseFloat(s.reps)   || 0), 0);
-            
-            return {
-                date: workout.date,
-                avgWeight: Math.round(totalWeight / match.sets.length),   // now rounded
-                avgReps: (totalReps / match.sets.length).toFixed(1)
-            };
+// Load latest 1RM stats from the server when the app starts
+async function loadExerciseStats() {
+    try {
+        const response = await fetch('/exercise_stats');
+        if (response.ok) {
+            exerciseStats = await response.json();
+            console.log("✅ Loaded 45-day 1RM stats from server", exerciseStats);
         }
+    } catch (e) {
+        console.log("No exercise_stats yet (first time)");
     }
-    return null;
 }
 
 function metersPerSecondToMph(speed) {
@@ -938,14 +922,14 @@ function renderActiveWorkout() {
         container.appendChild(div);
 
         const setsDiv = document.getElementById(`sets-${exIdx}`);
-        ex.sets.forEach((set, setIdx) => {
+                ex.sets.forEach((set, setIdx) => {
             const targetReps = parseInt(set.reps) || ex.target_reps || 10;
-            let suggested = null;
-
-            // Use the most recent set's weight/reps for the 1RM calculation
-            if (set.weight && set.reps) {
-                suggested = calculateSuggestedWeight(parseFloat(set.weight), parseInt(set.reps), targetReps);
-            }
+            
+            // Use the server-stored 45-day estimated 1RM
+            const estimatedOneRM = exerciseStats[ex.name] || null;
+            const suggested = estimatedOneRM 
+                ? Math.round(estimatedOneRM * (1 - (targetReps * 0.025))) 
+                : null;
 
             const row = document.createElement('div');
             row.style.marginBottom = "8px";
@@ -1962,6 +1946,7 @@ function showProgressTab(tab) {
 window.addEventListener('load', addAdminRestartButton);
 
 window.onload = () => { 
+    loadExerciseStats();   // ← add this line
     if (!initializeSessionTimer()) return;
 
     const backup = localStorage.getItem('active_workout_backup');
