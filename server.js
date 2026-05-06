@@ -24,61 +24,96 @@ try {
 
 // Calculate estimated 1RM from ALL sets in last 45 days (your preferred method)
 function calculateEstimatedOneRM(exerciseName) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 45);
+    return new Promise((resolve) => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 45);
+        const cutoffDate = cutoff.toISOString().split('T')[0];
 
-    let totalWeight = 0;
-    let totalReps = 0;
-    let setCount = 0;
+        db.all("SELECT exercises FROM workouts WHERE date >= ? ORDER BY date DESC", [cutoffDate], (err, rows) => {
+            if (err) {
+                console.error("1RM calculation error:", err);
+                resolve();
+                return;
+            }
 
-    db.all("SELECT exercises FROM workouts WHERE date >= ? ORDER BY date DESC", [cutoff.toISOString().split('T')[0]], (err, rows) => {
-        if (err) {
-            console.error("1RM calculation error:", err);
-            return;
-        }
+            let totalWeight = 0;
+            let totalReps = 0;
+            let setCount = 0;
 
-        rows.forEach(row => {
-            try {
-                const exercises = JSON.parse(row.exercises || '[]');
-                const match = exercises.find(ex => ex.name === exerciseName);
-                if (match && match.sets) {
-                    match.sets.forEach(set => {
-                        const w = parseFloat(set.weight);
-                        const r = parseInt(set.reps);
-                        if (w && r > 0) {
-                            totalWeight += w;
-                            totalReps += r;
-                            setCount++;
-                        }
-                    });
-                }
-            } catch(e) {}
+            (rows || []).forEach(row => {
+                try {
+                    const exercises = JSON.parse(row.exercises || '[]');
+                    const match = exercises.find(ex => ex.name === exerciseName);
+                    if (match && match.sets) {
+                        match.sets.forEach(set => {
+                            const w = parseFloat(set.weight);
+                            const r = parseInt(set.reps);
+                            if (w && r > 0) {
+                                totalWeight += w;
+                                totalReps += r;
+                                setCount++;
+                            }
+                        });
+                    }
+                } catch(e) {}
+            });
+
+            if (setCount > 0) {
+                const avgWeight = totalWeight / setCount;
+                const avgReps   = totalReps / setCount;
+                const oneRM = avgWeight * (1 + avgReps / 30);
+                exerciseStats[exerciseName] = Math.round(oneRM);
+            }
+            resolve();
         });
-
-        if (setCount > 0) {
-            const avgWeight = totalWeight / setCount;
-            const avgReps   = totalReps / setCount;
-            const oneRM = avgWeight * (1 + avgReps / 30);
-            exerciseStats[exerciseName] = Math.round(oneRM);
-            fs.writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
-        }
     });
+}
+
+// Update stats for a single workout (called after saving new workout)
+function updateExerciseStatsForWorkout(workout) {
+    if (!workout || !workout.exercises) return;
+    
+    const exerciseNames = new Set(workout.exercises.map(ex => ex.name).filter(name => name));
+    
+    (async () => {
+        for (const name of exerciseNames) {
+            await calculateEstimatedOneRM(name);
+        }
+        try {
+            fs.writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
+        } catch (e) {
+            console.error("Error writing stats file:", e);
+        }
+    })();
 }
 
 // Backfill on server start (populates with last 45 days)
 function backfillExerciseStats() {
     console.log("🔄 Backfilling 45-day 1RM stats...");
-    db.all("SELECT DISTINCT json_extract(value, '$.name') as name FROM workouts, json_each(exercises) WHERE date >= date('now', '-45 days')", [], (err, rows) => {
-        if (err) return console.error(err);
-        const uniqueExercises = [...new Set(rows.map(r => r.name))];
-        uniqueExercises.forEach(name => {
-            if (name) calculateEstimatedOneRM(name);
-        });
+    db.all("SELECT DISTINCT json_extract(value, '$.name') as name FROM workouts, json_each(exercises) WHERE date >= date('now', '-45 days')", [], async (err, rows) => {
+        if (err) {
+            console.error("Backfill query error:", err);
+            return;
+        }
+        
+        const uniqueExercises = [...new Set((rows || []).map(r => r.name).filter(name => name))];
+        console.log(`Found ${uniqueExercises.length} unique exercises to backfill`);
+        
+        for (const name of uniqueExercises) {
+            await calculateEstimatedOneRM(name);
+        }
+        
+        try {
+            fs.writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
+            console.log("✅ Backfill complete. Stats written to exercise_stats.json");
+        } catch (e) {
+            console.error("Error writing stats during backfill:", e);
+        }
     });
 }
 
-// Run backfill once when server starts
-backfillExerciseStats();
+// Run backfill once when server starts (with delay for db init)
+setTimeout(() => backfillExerciseStats(), 1000);
 
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
@@ -380,12 +415,11 @@ app.post('/save-workout', authenticateToken, (req, res) => {
                 return res.status(500).send("Error saving workout");
             }
             logAction(`SUCCESS: Saved workout: ${workoutData.name}`);
+            updateExerciseStatsForWorkout(workoutData);
             res.sendStatus(200);
-            // Add this immediately after you save the workout
-            updateExerciseStatsForWorkout(savedWorkout);   // ← add this line
         });
     });
-}
+});
 
 
 
