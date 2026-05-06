@@ -415,6 +415,8 @@ function isWatchOnlyWorkout(wk) {
     );
 }
 
+
+
 function normalizeWatchMetrics(wk) {
     if (!wk) return null;
 
@@ -448,6 +450,38 @@ function normalizeWatchMetrics(wk) {
         startTime: watch.startTime || wk.startTime || '',
         source: watch.source || 'Strava'
     };
+}
+
+// ==================== NEW HELPER FUNCTIONS (add these near the top with other helpers) ====================
+
+// Epley 1RM formula + suggestion for target reps
+function calculateSuggestedWeight(weight, reps, targetReps) {
+    if (!weight || !reps || reps <= 0) return null;
+    const oneRM = weight * (1 + reps / 30);           // Epley formula
+    // Standard %1RM curve for suggested working weight
+    const suggested = oneRM * (1 - (targetReps * 0.025));
+    return Math.round(suggested);                     // nearest whole number
+}
+
+// Find most recent previous workout that had this exact exercise
+function getLastWorkoutForExercise(exerciseName) {
+    // This assumes your workouts are in a global array called `workouts` (already in your code)
+    const pastWorkouts = workouts
+        .filter(w => w.date < currentWorkout.date)   // only previous workouts
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const workout of pastWorkouts) {
+        const matchingExercise = workout.exercises.find(ex => ex.name === exerciseName);
+        if (matchingExercise && matchingExercise.sets && matchingExercise.sets.length > 0) {
+            return {
+                date: workout.date,
+                sets: matchingExercise.sets,
+                avgWeight: matchingExercise.sets.reduce((sum, s) => sum + parseFloat(s.weight || 0), 0) / matchingExercise.sets.length,
+                avgReps: matchingExercise.sets.reduce((sum, s) => sum + parseFloat(s.reps || 0), 0) / matchingExercise.sets.length
+            };
+        }
+    }
+    return null;
 }
 
 function metersPerSecondToMph(speed) {
@@ -862,11 +896,20 @@ function startFromTemplateByIndex(idx) {
 function renderActiveWorkout() {
     const container = document.getElementById('active-workout');
     if (!container || !currentWorkout) return;
+
     container.innerHTML = `<h3>${currentWorkout.name} - ${currentWorkout.date}</h3>`;
+
     currentWorkout.exercises.forEach((ex, exIdx) => {
+        const lastWorkout = getLastWorkoutForExercise(ex.name);
+        const historyHTML = lastWorkout 
+            ? `<p style="font-size:0.85em; color:#888; margin:8px 0 12px 0;">
+                 Last time (${lastWorkout.date}): ${ex.sets.length} sets × avg <strong>${lastWorkout.avgWeight} lbs</strong> for <strong>${lastWorkout.avgReps} reps</strong>
+               </p>` 
+            : '';
+
         const div = document.createElement('div');
         div.className = 'exercise';
-        
+
         div.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <strong style="font-size: 1.2em;">${ex.name}</strong>
@@ -875,10 +918,12 @@ function renderActiveWorkout() {
                        font-size: 0.7em; padding: 4px 10px; border-radius: 12px; 
                        cursor: pointer; font-weight: bold;">Delete</button>
             </div>
-            
+
             <div style="font-size: 0.85em; color: #666; margin-bottom: 10px;">
                 Target: ${ex.target_sets || 0} x ${ex.target_reps || 0}
             </div>
+
+            ${historyHTML}
 
             <textarea 
                 placeholder="Add a note (e.g. 'felt heavy')" 
@@ -890,26 +935,41 @@ function renderActiveWorkout() {
         `;
 
         container.appendChild(div);
+
         const setsDiv = document.getElementById(`sets-${exIdx}`);
         ex.sets.forEach((set, setIdx) => {
+            const targetReps = parseInt(set.reps) || ex.target_reps || 10;
+            let suggested = null;
+
+            // Use the most recent set's weight/reps for the 1RM calculation
+            if (set.weight && set.reps) {
+                suggested = calculateSuggestedWeight(parseFloat(set.weight), parseInt(set.reps), targetReps);
+            }
+
             const row = document.createElement('div');
-            row.style.marginBottom = "8px"; // Adding a little breathing room between sets
+            row.style.marginBottom = "8px";
             row.innerHTML = `
                 <span style="font-size: 0.9em; color: #666; margin-right: 5px;">Set ${setIdx+1}</span>
-                <input type="text" placeholder="lbs" value="${set.weight||''}" 
+                <input type="text" 
+                       placeholder="lbs" 
+                       value="${set.weight || ''}" 
                        oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
-                       style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center;"> 
-                <input type="number" placeholder="reps" value="${set.reps||''}" 
+                       style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; 
+                              ${!set.weight && suggested ? 'color: #888;' : ''}">
+                <span style="margin:0 4px; color:#666;">lbs</span>
+                <input type="number" 
+                       placeholder="reps" 
+                       value="${set.reps||''}" 
                        oninput="updateSet(${exIdx},${setIdx},'reps',this.value)" 
                        style="width:55px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center;">
                 <button onclick="removeSet(${exIdx},${setIdx})" 
                         style="width:auto; background:#ff3b30; padding: 8px 12px; margin-left: 5px;">-</button>
-             `;
-             setsDiv.appendChild(row);
+            `;
+            setsDiv.appendChild(row);
         });
     });
 
-    // NEW: Add a button at the bottom to add a new exercise to this specific workout
+    // Add exercise button
     const addExBtn = document.createElement('div');
     addExBtn.innerHTML = `
         <hr style="margin: 20px 0;">
@@ -934,11 +994,19 @@ function addNewExerciseToActive() {
 }
 
 function updateSet(e, s, f, v) { 
-    if(f==='weight') currentWorkout.exercises[e].sets[s][f] = v.toLowerCase()==='bw' ? 'BW' : parseFloat(v)||0;
-    else currentWorkout.exercises[e].sets[s][f] = parseInt(v)||0;
-    
-    // ONLY save to phone backup while training. 
-    // Do NOT call saveWorkoutToPi here.
+    const exercise = currentWorkout.exercises[e];
+    const set = exercise.sets[s];
+
+    if (f === 'weight') {
+        set[f] = v.toLowerCase() === 'bw' ? 'BW' : parseFloat(v) || 0;
+    } else if (f === 'reps') {
+        set[f] = parseInt(v) || 0;
+        // Reps changed → re-render so all suggestions update live
+        renderActiveWorkout();
+        return; // skip the normal save below
+    }
+
+    // Save backup
     localStorage.setItem('active_workout_backup', JSON.stringify(currentWorkout));
 }
 
