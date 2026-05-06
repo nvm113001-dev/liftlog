@@ -12,6 +12,24 @@
             .then(reg => console.log('Service Worker registered'))
             .catch(err => console.log('Service Worker registration failed:', err));
     }
+    
+    // Early redirect to login if not authenticated (before any render)
+    (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenFromUrl = urlParams.get('token');
+        
+        if (tokenFromUrl) {
+            localStorage.setItem('liftlog_token', tokenFromUrl);
+            localStorage.setItem('liftlog_last_active_at', String(Date.now()));
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        if (!localStorage.getItem('liftlog_token')) {
+            if (!window.location.pathname.includes('login.html')) {
+                window.location.href = '/login.html';
+            }
+        }
+    })();
 </script>
 </head>
 <body>

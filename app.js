@@ -3,30 +3,7 @@ function getAuthHeader() {
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
-// Handle token from URL after Google login
-const urlParams = new URLSearchParams(window.location.search);
-const tokenFromUrl = urlParams.get('token');
-const debug = urlParams.get('debug');
-
-if (tokenFromUrl) {
-    localStorage.setItem('liftlog_token', tokenFromUrl);
-    localStorage.setItem('liftlog_last_active_at', String(Date.now()));
-    window.history.replaceState({}, document.title, window.location.pathname);
-}
-
-// Force login screen if no token
-if (!localStorage.getItem('liftlog_token')) {
-    // Check if we are ALREADY on the login page to prevent infinite loops
-    if (!window.location.pathname.includes('login.html')) {
-        window.location.href = '/login.html'; // Send them to the waiting room
-    }
-}
-
-window.onerror = function(msg, url, lineNo, columnNo, error) {
-  alert('Error: ' + msg + '\nLine: ' + lineNo);
-  return false;
-};
-const API_BASE = 'https://liftlognm.tailee3a44.ts.net';// Current logged-in user 
+// Current logged-in user 
 // The Decoder: Cracks open the JWT to find out who is logged in
 function getUserIdFromToken() {
     const token = localStorage.getItem('liftlog_token');
