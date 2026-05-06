@@ -469,6 +469,30 @@ async function loadExerciseStats() {
     }
 }
 
+// History sneak peek — most recent previous workout for this exact exercise
+function getLastWorkoutForExercise(exerciseName) {
+    if (!workouts || !currentWorkout) return null;
+
+    const past = workouts
+        .filter(w => w.date < currentWorkout.date)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const workout of past) {
+        const match = workout.exercises?.find(ex => ex.name === exerciseName);
+        if (match && match.sets && match.sets.length > 0) {
+            const totalWeight = match.sets.reduce((sum, s) => sum + (parseFloat(s.weight) || 0), 0);
+            const totalReps   = match.sets.reduce((sum, s) => sum + (parseFloat(s.reps)   || 0), 0);
+            
+            return {
+                date: workout.date,
+                avgWeight: Math.round(totalWeight / match.sets.length),
+                avgReps: (totalReps / match.sets.length).toFixed(1)
+            };
+        }
+    }
+    return null;
+}
+
 function metersPerSecondToMph(speed) {
     return speed ? (speed * 2.23694).toFixed(1) : '';
 }
@@ -884,7 +908,7 @@ function renderActiveWorkout() {
 
     container.innerHTML = `<h3>${currentWorkout.name} - ${currentWorkout.date}</h3>`;
 
-    currentWorkout.exercises.forEach((ex, exIdx) => {
+        currentWorkout.exercises.forEach((ex, exIdx) => {
         const lastWorkout = getLastWorkoutForExercise(ex.name);
         const historyHTML = lastWorkout 
             ? `<p style="font-size:0.85em; color:#888; margin:8px 0 12px 0;">
@@ -922,10 +946,10 @@ function renderActiveWorkout() {
         container.appendChild(div);
 
         const setsDiv = document.getElementById(`sets-${exIdx}`);
-                ex.sets.forEach((set, setIdx) => {
+        ex.sets.forEach((set, setIdx) => {
             const targetReps = parseInt(set.reps) || ex.target_reps || 10;
             
-            // Use the server-stored 45-day estimated 1RM
+            // Server-stored 45-day estimated 1RM for light-grey suggestion
             const estimatedOneRM = exerciseStats[ex.name] || null;
             const suggested = estimatedOneRM 
                 ? Math.round(estimatedOneRM * (1 - (targetReps * 0.025))) 
@@ -936,11 +960,11 @@ function renderActiveWorkout() {
             row.innerHTML = `
                 <span style="font-size: 0.9em; color: #666; margin-right: 5px;">Set ${setIdx+1}</span>
                 <input type="text" 
-                        placeholder="${suggested || 'lbs'}" 
-                        value="${set.weight || ''}" 
-                        oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
-                        style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; 
-                                ${!set.weight ? 'color: #888;' : ''}">
+                       placeholder="${suggested || 'lbs'}" 
+                       value="${set.weight || ''}" 
+                       oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
+                       style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; 
+                              ${!set.weight ? 'color: #888;' : ''}">
                 <span style="margin:0 4px; color:#666;">lbs</span>
                 <input type="number" 
                        placeholder="reps" 
