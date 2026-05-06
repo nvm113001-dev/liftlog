@@ -455,29 +455,30 @@ function normalizeWatchMetrics(wk) {
 // ==================== NEW HELPER FUNCTIONS (add these near the top with other helpers) ====================
 
 // Epley 1RM formula + suggestion for target reps
-function calculateSuggestedWeight(weight, reps, targetReps) {
-    if (!weight || !reps || reps <= 0) return null;
-    const oneRM = weight * (1 + reps / 30);           // Epley formula
-    // Standard %1RM curve for suggested working weight
+function calculateSuggestedWeight(previousWeight, previousReps, targetReps) {
+    if (!previousWeight || !previousReps || previousReps <= 0) return null;
+    const oneRM = previousWeight * (1 + previousReps / 30);
     const suggested = oneRM * (1 - (targetReps * 0.025));
-    return Math.round(suggested);                     // nearest whole number
+    return Math.round(suggested);   // nearest whole number
 }
 
-// Find most recent previous workout that had this exact exercise
+// Get last workout history + rounded averages
 function getLastWorkoutForExercise(exerciseName) {
-    // This assumes your workouts are in a global array called `workouts` (already in your code)
-    const pastWorkouts = workouts
-        .filter(w => w.date < currentWorkout.date)   // only previous workouts
+    if (!workouts || !currentWorkout) return null;
+    const past = workouts
+        .filter(w => w.date < currentWorkout.date)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    for (const workout of pastWorkouts) {
-        const matchingExercise = workout.exercises.find(ex => ex.name === exerciseName);
-        if (matchingExercise && matchingExercise.sets && matchingExercise.sets.length > 0) {
+    for (const workout of past) {
+        const match = workout.exercises?.find(ex => ex.name === exerciseName);
+        if (match && match.sets && match.sets.length > 0) {
+            const totalWeight = match.sets.reduce((sum, s) => sum + (parseFloat(s.weight) || 0), 0);
+            const totalReps   = match.sets.reduce((sum, s) => sum + (parseFloat(s.reps)   || 0), 0);
+            
             return {
                 date: workout.date,
-                sets: matchingExercise.sets,
-                avgWeight: matchingExercise.sets.reduce((sum, s) => sum + parseFloat(s.weight || 0), 0) / matchingExercise.sets.length,
-                avgReps: matchingExercise.sets.reduce((sum, s) => sum + parseFloat(s.reps || 0), 0) / matchingExercise.sets.length
+                avgWeight: Math.round(totalWeight / match.sets.length),   // now rounded
+                avgReps: (totalReps / match.sets.length).toFixed(1)
             };
         }
     }
@@ -951,11 +952,11 @@ function renderActiveWorkout() {
             row.innerHTML = `
                 <span style="font-size: 0.9em; color: #666; margin-right: 5px;">Set ${setIdx+1}</span>
                 <input type="text" 
-                       placeholder="lbs" 
-                       value="${set.weight || ''}" 
-                       oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
-                       style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; 
-                              ${!set.weight && suggested ? 'color: #888;' : ''}">
+                        placeholder="${suggested || 'lbs'}" 
+                        value="${set.weight || ''}" 
+                        oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
+                        style="width:70px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; 
+                                ${!set.weight ? 'color: #888;' : ''}">
                 <span style="margin:0 4px; color:#666;">lbs</span>
                 <input type="number" 
                        placeholder="reps" 
