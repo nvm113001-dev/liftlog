@@ -10,6 +10,76 @@ function logAction(message) {
         if (err) console.error("Audit Log Write Error:", err);
     });
 }
+
+// ==================== 45-DAY ROLLING 1RM + BACKFILL ====================
+
+const STATS_FILE = '/mnt/liftlog_data/liftlog/exercise_stats.json';
+let exerciseStats = {};
+
+try {
+    if (fs.existsSync(STATS_FILE)) {
+        exerciseStats = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
+    }
+} catch (e) {}
+
+// Calculate estimated 1RM from ALL sets in last 45 days (your preferred method)
+function calculateEstimatedOneRM(exerciseName) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 45);
+
+    let totalWeight = 0;
+    let totalReps = 0;
+    let setCount = 0;
+
+    db.all("SELECT exercises FROM workouts WHERE date >= ? ORDER BY date DESC", [cutoff.toISOString().split('T')[0]], (err, rows) => {
+        if (err) {
+            console.error("1RM calculation error:", err);
+            return;
+        }
+
+        rows.forEach(row => {
+            try {
+                const exercises = JSON.parse(row.exercises || '[]');
+                const match = exercises.find(ex => ex.name === exerciseName);
+                if (match && match.sets) {
+                    match.sets.forEach(set => {
+                        const w = parseFloat(set.weight);
+                        const r = parseInt(set.reps);
+                        if (w && r > 0) {
+                            totalWeight += w;
+                            totalReps += r;
+                            setCount++;
+                        }
+                    });
+                }
+            } catch(e) {}
+        });
+
+        if (setCount > 0) {
+            const avgWeight = totalWeight / setCount;
+            const avgReps   = totalReps / setCount;
+            const oneRM = avgWeight * (1 + avgReps / 30);
+            exerciseStats[exerciseName] = Math.round(oneRM);
+            fs.writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
+        }
+    });
+}
+
+// Backfill on server start (populates with last 45 days)
+function backfillExerciseStats() {
+    console.log("🔄 Backfilling 45-day 1RM stats...");
+    db.all("SELECT DISTINCT json_extract(value, '$.name') as name FROM workouts, json_each(exercises) WHERE date >= date('now', '-45 days')", [], (err, rows) => {
+        if (err) return console.error(err);
+        const uniqueExercises = [...new Set(rows.map(r => r.name))];
+        uniqueExercises.forEach(name => {
+            if (name) calculateEstimatedOneRM(name);
+        });
+    });
+}
+
+// Run backfill once when server starts
+backfillExerciseStats();
+
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const app = express();
@@ -163,6 +233,11 @@ app.get('/auth/google/callback',
         res.redirect(`/index.html?token=${token}&debug=success`);
     }
 );
+
+app.get('/exercise_stats', authenticateToken, (req, res) => {
+    res.json(exerciseStats);
+});
+
  // This allows the iPad to talk to the API
 
 // The bridge that receives data from your app and puts it in SQLite
@@ -198,6 +273,7 @@ app.post('/add-workout', authenticateToken, (req, res) => {
         if (this.changes === 0) {
             return res.json({ message: "Duplicate workout skipped", skipped: true });
         }
+        updateExerciseStatsForWorkout({ exercises: JSON.parse(exercisesStr) });   // ← add this
         res.json({ message: "Saved to SSD", id: this.lastID, skipped: false });
     });
 });
@@ -277,6 +353,75 @@ app.post('/save-templates', authenticateToken, (req, res) => {
     }
 });
 
+// ==================== 45-DAY ESTIMATED 1RM (server-side) ====================
+
+const STATS_FILE = '/mnt/liftlog_data/liftlog/exercise_stats.json';
+
+// Load stats (with fallback to empty object)
+let exerciseStats = {};
+try {
+    if (require('fs').existsSync(STATS_FILE)) {
+        exerciseStats = JSON.parse(require('fs').readFileSync(STATS_FILE, 'utf8'));
+    }
+} catch (e) {}
+
+// Calculate 1RM from ALL sets in last 45 days (runs once per exercise)
+function calculateEstimatedOneRM(exerciseName) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 45);
+
+    let totalWeight = 0;
+    let totalReps = 0;
+    let setCount = 0;
+
+    // `workouts` is already loaded in your server.js
+    workouts.forEach(workout => {
+        const workoutDate = new Date(workout.date);
+        if (workoutDate < cutoff) return;
+
+        const match = workout.exercises?.find(ex => ex.name === exerciseName);
+        if (match && match.sets) {
+            match.sets.forEach(set => {
+                const w = parseFloat(set.weight);
+                const r = parseInt(set.reps);
+                if (w && r > 0) {
+                    totalWeight += w;
+                    totalReps += r;
+                    setCount++;
+                }
+            });
+        }
+    });
+
+    if (setCount === 0) return null;
+
+    const avgWeight = totalWeight / setCount;
+    const avgReps   = totalReps / setCount;
+
+    const oneRM = avgWeight * (1 + avgReps / 30);
+    return Math.round(oneRM);
+}
+
+// Update stats for all exercises in a newly saved workout
+function updateExerciseStatsForWorkout(savedWorkout) {
+    if (!savedWorkout.exercises) return;
+
+    savedWorkout.exercises.forEach(ex => {
+        const newOneRM = calculateEstimatedOneRM(ex.name);
+        if (newOneRM) {
+            exerciseStats[ex.name] = newOneRM;
+        }
+    });
+
+    // Save to disk
+    require('fs').writeFileSync(STATS_FILE, JSON.stringify(exerciseStats, null, 2));
+}
+
+// GET current 1RM stats for the frontend
+app.get('/exercise_stats', (req, res) => {
+    res.json(exerciseStats);
+});
+
 const HISTORY_FILE = '/mnt/liftlog_data/liftlog/history.json';
 
 app.post('/save-workout', authenticateToken, (req, res) => {
@@ -298,9 +443,11 @@ app.post('/save-workout', authenticateToken, (req, res) => {
             }
             logAction(`SUCCESS: Saved workout: ${workoutData.name}`);
             res.sendStatus(200);
+            // Add this immediately after you save the workout
+            updateExerciseStatsForWorkout(savedWorkout);   // ← add this line
         });
     });
-});
+}
 
 
 
