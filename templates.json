@@ -1,0 +1,266 @@
+[
+  {
+    "name": "Back",
+    "exercises": [
+      {
+        "name": "Lat Pulldown",
+        "muscleGroup": "",
+        "target_sets": 4,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Face Pulls",
+        "muscleGroup": "",
+        "target_sets": 2,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Cable Row",
+        "muscleGroup": "",
+        "target_sets": 4,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Lat Pullovers",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Bird Dogs",
+        "muscleGroup": "",
+        "target_sets": 2,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Superman\u2019s",
+        "muscleGroup": "",
+        "target_sets": 2,
+        "target_reps": 15,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Close Grip Pulldowns",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Shoulder Width Rows",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      }
+    ],
+    "user_id": 75001
+  },
+  {
+    "name": "Chest",
+    "exercises": [
+      {
+        "name": "Incline Bench Smith Machine",
+        "muscleGroup": "",
+        "target_sets": 4,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "DB Bench",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Dips",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Fly Machine",
+        "muscleGroup": "",
+        "target_sets": 4,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Overhead Bar Extension",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Cable Tricep Kickback",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      }
+    ],
+    "user_id": 75001
+  },
+  {
+    "name": "Legs ",
+    "exercises": [
+      {
+        "name": "Cyclist Squats Smith Machine",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Leg Press",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Seated Leg Curl",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Leg Extensions",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 15,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Standing Calf Raise",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Bulgarians Smith Machine",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 8,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Adductors",
+        "muscleGroup": "",
+        "target_sets": 2,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Abductors",
+        "muscleGroup": "",
+        "target_sets": 2,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      }
+    ],
+    "user_id": 75001
+  },
+  {
+    "name": "Shoulders/Bis",
+    "exercises": [
+      {
+        "name": "Lean in Lateral Raise",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Lean Away Lateral Raise",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Cable Y Raise",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Reverse Pec Dec",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Reverse Cable Crossover",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 10,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Preacher Curl DB",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Hammer Curl DB",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      },
+      {
+        "name": "Preacher Curl Machine",
+        "muscleGroup": "",
+        "target_sets": 3,
+        "target_reps": 20,
+        "note": "",
+        "sets": []
+      }
+    ],
+    "user_id": 75001
+  }
+]
