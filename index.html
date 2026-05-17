@@ -33,25 +33,57 @@
 </script>
 </head>
 <body>
-    <header>
-
+    <header onclick="showSection('dashboard')" style="cursor:pointer;">
         <h1>💪 LiftLog</h1>
-
-        <nav>
-            <button onclick="showSection('dashboard')">Dashboard</button>
-            <button onclick="showSection('templates')">Templates</button>
-            <button onclick="showSection('log')">Log Workout</button>
-            <button onclick="showSection('progress')">Progress</button>
-            <button onclick="showSection('settings')">Settings</button>
-        </nav>
     </header>
+
+    <nav id="bottom-nav">
+        <button onclick="showSection('dashboard')" data-section="dashboard">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Dashboard</span>
+        </button>
+        <button onclick="showSection('templates')" data-section="templates">
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">Templates</span>
+        </button>
+        <button onclick="showSection('log')" data-section="log">
+            <span class="nav-icon">➕</span>
+            <span class="nav-label">Log</span>
+        </button>
+        <button onclick="showSection('progress')" data-section="progress">
+            <span class="nav-icon">📈</span>
+            <span class="nav-label">Progress</span>
+        </button>
+        <button onclick="showSection('settings')" data-section="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Settings</span>
+        </button>
+    </nav>
 
     <!-- Dashboard Section -->
     <section id="dashboard-section" class="section">
-        <h2>Dashboard</h2>
+        <h2 class="neon-gradient-text">Dashboard</h2>
         <div id="report-summary" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;"></div>
-        <h3>Workouts by Month</h3>
-        <div id="monthly-breakdown" style="background: #f9f9f9; padding: 15px; border-radius: 10px;"></div>
+
+        <!-- Interactive Calendar -->
+        <div id="workout-calendar-wrap">
+            <div class="cal-nav">
+                <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+                <span id="cal-month-title" class="cal-month-title"></span>
+                <button class="cal-nav-btn" onclick="calNext()">›</button>
+            </div>
+            <div class="cal-day-labels">
+                <div class="cal-day-label">S</div><div class="cal-day-label">M</div>
+                <div class="cal-day-label">T</div><div class="cal-day-label">W</div>
+                <div class="cal-day-label">T</div><div class="cal-day-label">F</div>
+                <div class="cal-day-label">S</div>
+            </div>
+            <div id="cal-days" class="cal-days"></div>
+            <div id="cal-day-summary"></div>
+        </div>
+
+        <h3 class="neon-gradient-text" style="margin-bottom: 12px;">Workouts by Month</h3>
+        <div id="monthly-breakdown" style="background: #1c1c1e; border: 1px solid #333; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);"></div>
     </section>
 
     <!-- Templates Section -->
@@ -135,8 +167,17 @@
 
         <!-- Exercises View -->
     <div id="progress-exercises-content" style="display: none;">
-            <h3>Lift Progression</h3>
-            <div id="exercise-breakdown-list"></div>
+        <h3>Lift Progression</h3>
+        <div style="margin-bottom:16px;">
+            <select id="progress-exercise-select" onchange="renderProgressChart()"
+                    style="width:100%; padding:12px; border-radius:8px; border:1px solid #ddd; font-size:16px;">
+                <option value="">— select an exercise —</option>
+            </select>
+        </div>
+        <div style="position:relative; height:260px; margin-bottom:24px;">
+            <canvas id="progress-chart"></canvas>
+        </div>
+        <div id="exercise-breakdown-list"></div>
     </div>
 </section>
 
@@ -175,7 +216,36 @@
                 <button onclick="pasteAndImport()" style="width:100%; margin-top:10px;">Import from Paste</button>
             </div>
 
+            <!-- Apple Health Import -->
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom:15px;">
+                <h3 style="margin-top:0;">🍎 Apple Health Auto Export</h3>
+                <p style="font-size:13px; color:#666; margin:0 0 12px;">Generate a secure token for the Health Auto Export iOS app, or upload a JSON export manually.</p>
+
+                <div id="ah-token-section" style="display:none; margin-bottom:14px;">
+                    <p style="font-size:12px; color:#555; margin:0 0 6px;">Your import token (keep this private):</p>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <code id="ah-token-text" style="flex:1; background:#1c1c1e; color:#39ff14; padding:10px 12px; border-radius:8px; font-size:11px; word-break:break-all; font-family:monospace;"></code>
+                        <button onclick="copyAppleHealthToken()" style="padding:10px 14px; background:#007aff; color:white; border-radius:8px; font-size:13px; white-space:nowrap; width:auto;">Copy</button>
+                    </div>
+                    <p id="ah-last-import-text" style="font-size:12px; color:#888; margin:8px 0 0;"></p>
+                    <p style="font-size:11px; color:#aaa; margin:4px 0 0;">Endpoint URL: <code id="ah-endpoint-url" style="font-size:10px; word-break:break-all;"></code></p>
+                </div>
+
+                <button onclick="generateAppleHealthToken()" id="ah-generate-btn"
+                        style="width:100%; padding:12px; background:#ff2d55; color:white; border-radius:8px; margin-bottom:12px;">
+                    🔑 Generate Import Token
+                </button>
+
+                <div style="border-top:1px solid #e0e0e0; padding-top:12px;">
+                    <p style="font-size:12px; color:#666; margin:0 0 8px;">Or upload a JSON export file directly:</p>
+                    <input type="file" id="ah-upload-file" accept=".json" style="width:100%; padding:8px; margin-bottom:8px;">
+                    <button onclick="uploadAppleHealthFile()" style="width:100%; padding:12px; background:#ff9500; color:white; border-radius:8px;">📤 Upload Apple Health JSON</button>
+                    <div id="ah-upload-status" style="display:none; margin-top:10px; font-size:13px; padding:10px; border-radius:8px; text-align:center;"></div>
+                </div>
+            </div>
+
             <button onclick="syncStrava()" id="strava-sync-btn" style="width:100%; padding:12px; background:#007aff; color:white;">🔄 Sync Strava Activities</button>
+            <p id="strava-sync-hint" style="display:none; text-align:center; color:#888; font-size:13px; margin-top:8px;">Connect your Strava account in the Account tab first.</p>
         </div>
 
         <!-- Account Content -->
@@ -190,12 +260,45 @@
                 <button onclick="saveUsername()" style="width:100%; margin-top:15px; padding:12px; background:#34c759; color:white;">Save Username</button>
             </div>
 
+            <!-- Strava Connection -->
+            <div id="strava-connect-card" style="background:#1c1c2e; border:1px solid #444; padding:20px; border-radius:12px; margin-top:20px;">
+                <h3 style="margin-top:0; color:#fc4c02;">🚴 Strava</h3>
+                <div id="strava-status-display" style="font-size:13px; color:#888; margin-bottom:12px;"></div>
+                <button id="strava-connect-btn" onclick="connectStrava()"
+                        style="width:100%; padding:14px; background:#fc4c02; color:white; border-radius:10px; font-size:16px; font-weight:600; border:none; cursor:pointer;">
+                    Connect My Strava Account
+                </button>
+            </div>
+
+            <!-- Admin: Invite Key Generator (owner only) -->
+            <div id="admin-invite-card" style="display:none; background:#1c1c2e; border:1px solid #444; padding:20px; border-radius:12px; margin-top:20px;">
+                <h3 style="margin-top:0; color:#ff9500;">🔑 Generate Invite</h3>
+                <button onclick="generateInviteKey()" id="generate-invite-btn"
+                        style="width:100%; padding:14px; background:#ff9500; color:white; border-radius:10px; font-size:16px; font-weight:600; border:none; cursor:pointer;">
+                    Generate New Invite Key
+                </button>
+                <div id="invite-result" style="display:none; margin-top:16px;">
+                    <p style="margin:0 0 8px; font-size:13px; color:#aaa;">Single use · expires in 48 hours</p>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <code id="invite-token-display"
+                              style="flex:1; background:#000; color:#39ff14; padding:12px 14px; border-radius:8px; font-size:20px; letter-spacing:3px; font-family:monospace; word-break:break-all;"></code>
+                        <button onclick="copyInviteKey()"
+                                style="padding:12px 14px; background:#007aff; color:white; border-radius:8px; font-size:14px; border:none; cursor:pointer; white-space:nowrap; width:auto;">
+                            Copy
+                        </button>
+                    </div>
+                    <p id="invite-expiry-msg" style="margin:10px 0 0; font-size:12px; color:#888;"></p>
+                </div>
+            </div>
+
             <button onclick="logout()" style="background:#ff3b30; color:white; width:100%; padding:15px; margin-top:40px; border-radius:12px; font-size:16px;">
                 🚪 Sign Out
             </button>
         </div>
     </section>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7/dist/simple-statistics.min.js"></script>
     <script src="app.js"></script>
     <script>
       if ('serviceWorker' in navigator) {

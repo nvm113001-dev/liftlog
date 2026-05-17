@@ -1,23 +1,136 @@
 body {
     font-family: system-ui, -apple-system, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: #f5f5f7;
-    max-width: 600px;
     margin: 0 auto;
-    color: #1c1c1e;
+    padding: 70px 0 80px;
+    background: linear-gradient(-45deg, #0d0d12, #1a1025, #0a1510, #25120f);
+    background-size: 400% 400%;
+    animation: synthwaveFlow 20s ease infinite;
+    max-width: 600px;
+    color: #e0e0e0;
+}
+
+@keyframes synthwaveFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 header {
-    background: #007aff;
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 600px;
+    background: #1c1c1e;
     color: white;
     padding: 16px;
     text-align: center;
+    border-bottom: 2px solid #ff5e00;
+    box-shadow: 0 4px 20px rgba(255, 94, 0, 0.2);
+    z-index: 100;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+#bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 600px;
+    background: #1c1c1e;
+    border-top: 2px solid #ff5e00;
+    box-shadow: 0 -4px 20px rgba(255, 94, 0, 0.15);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 0 env(safe-area-inset-bottom, 8px);
+    z-index: 100;
+    box-sizing: border-box;
+}
+
+#bottom-nav button {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+    color: #888 !important;
+    text-shadow: none !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 10px !important;
+    width: auto;
+    max-width: none;
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 0.15s ease, text-shadow 0.15s ease !important;
+}
+
+#bottom-nav button .nav-icon {
+    filter: grayscale(1) brightness(0.45);
+    transition: filter 0.15s ease;
+}
+
+#bottom-nav button .nav-label {
+    color: #555;
+    transition: color 0.15s ease;
+}
+
+#bottom-nav button:active {
+    transform: scale(0.92) !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+}
+
+#bottom-nav button.nav-active .nav-icon {
+    filter: none;
+}
+
+#bottom-nav button.nav-active .nav-label {
+    color: #ffffff;
+}
+
+#bottom-nav button[data-section="log"].nav-active .nav-icon {
+    filter: none drop-shadow(0 0 6px rgba(57, 255, 20, 0.9));
+}
+
+#bottom-nav button[data-section="log"].nav-active .nav-label {
+    color: #39ff14;
+    text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+}
+
+.nav-icon {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 header h1 {
     margin: 0;
-    font-size: 24px;
+    font-size: 28px;
+    /* Gradient of all requested neon colors */
+    background: linear-gradient(90deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.neon-gradient-text {
+    background: linear-gradient(90deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+    text-shadow: none !important;
 }
 
 nav {
@@ -31,10 +144,17 @@ nav {
 nav button {
     padding: 10px 14px;
     font-size: 15px;
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
+    background: linear-gradient(145deg, #2a2a2e, #1c1c1e) !important;
+    color: #39ff14 !important; /* Neon Green Accent */
+    border: 1px solid #1a8f0b !important;
+    border-bottom: 3px solid #1a8f0b !important;
     border-radius: 8px;
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.2) !important;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 8px rgba(57, 255, 20, 0.6) !important;
+}
+nav button:active {
+    transform: scale(0.98) translateY(2px) !important;
+    border-bottom: 1px solid #1a8f0b !important;
 }
 
 .section {
@@ -43,28 +163,52 @@ nav button {
 
 h2 {
     margin-top: 0;
-    color: #007aff;
+    color: #ff107a; /* Neon Pink Accent */
+    text-shadow: 0 0 10px rgba(255, 16, 122, 0.3);
 }
 
 button {
-    padding: 12px 16px;
-    margin: 6px 0;
-    background: #007aff;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    font-size: 17px;
+    padding: 14px 16px;
+    margin: 8px 0;
+    background: linear-gradient(145deg, #b026ff, #7a00cc) !important; /* Neon Purple 3D */
+    color: #ffffff !important;
+    border: 1px solid #5e00a3 !important;
+    border-bottom: 4px solid #5e00a3 !important;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
     width: 100%;
     max-width: 400px;
+    box-shadow: 0 6px 15px rgba(176, 38, 255, 0.4) !important;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 8px rgba(255,255,255,0.4) !important;
+}
+
+button:active {
+    transform: scale(0.98) translateY(3px);
+    border-bottom: 1px solid #5e00a3 !important;
+    box-shadow: 0 2px 5px rgba(176, 38, 255, 0.5) !important;
 }
 
 .exercise {
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    padding: 14px;
-    margin: 12px 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    position: relative;
+    background: #1c1c1e !important;
+    border: none !important;
+    border-radius: 16px;
+    padding: 16px;
+    margin: 16px 0;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6), 0 2px 5px rgba(0, 0, 0, 0.3);
+    color: #e0e0e0;
+}
+
+.exercise::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+    z-index: -1;
 }
 
 .set {
@@ -75,11 +219,22 @@ button {
 }
 
 input[type="number"], input[type="text"], select, textarea {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #333 !important;
+    background: #2c2c2e !important;
+    color: #ffffff !important;
+    border-radius: 10px;
     font-size: 16px;
     width: 100%;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+input[type="number"]:focus, input[type="text"]:focus, select:focus, textarea:focus {
+    outline: none;
+    border: 1px solid #ff5e00 !important; /* Neon Orange Focus Ring */
+    background: #1c1c1e !important;
+    box-shadow: 0 0 12px rgba(255, 94, 0, 0.4) !important;
 }
 
 textarea {
@@ -90,34 +245,298 @@ textarea {
 /* Container for the toggle */
 .tab-container {
     display: flex;
-    background-color: #f0f0f0;
+    background-color: #1c1c1e;
     border-radius: 12px;
     padding: 4px;
     margin-bottom: 20px;
-    border: 1px solid #ddd;
+    border: 1px solid #333;
 }
 
 /* Base button style */
 .report-tab {
     flex: 1;
-    border: none;
+    border: 1px solid transparent !important;
+    border-bottom: 1px solid transparent !important;
     border-radius: 10px;
     padding: 12px;
     font-weight: bold;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.1s ease;
     text-align: center;
+    background-color: transparent !important;
+    color: #888888 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
 }
 
 /* The ACTIVE state - Blue background, forced white text */
 .tab-active {
-    background-color: #007aff !important;
+    background: linear-gradient(145deg, #ff5e00, #cc4a00) !important; /* Neon Orange Tab */
+    border: 1px solid #993800 !important;
+    border-bottom: 3px solid #993800 !important;
     color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(255, 94, 0, 0.4) !important;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
+}
+.tab-active:active {
+    transform: scale(0.98) translateY(2px);
+    border-bottom: 1px solid #993800 !important;
 }
 
 /* The INACTIVE state - Transparent background, forced dark text */
 .tab-inactive {
     background-color: transparent !important;
-    color: #444444 !important;
+    color: #888888 !important;
+}
+
+/* ==================================================
+   AUTOMATIC INLINE STYLE OVERRIDES FOR DARK MODE
+   (Fixes hardcoded whites/blacks from app.js)
+   ================================================== */
+[style*="color: black"], [style*="color: #333"], [style*="color:#333"], [style*="color: #1c1c1e"] {
+    color: #ffffff !important;
+}
+[style*="color: #666"], [style*="color:#666"], [style*="color: #555"], [style*="color: #888"], [style*="color:#888"], [style*="color: #444"] {
+    color: #aaaaaa !important;
+}
+[style*="background: #fff"], [style*="background:#fff"], [style*="background: white"], [style*="background:white"] {
+    background-color: #1c1c1e !important;
+}
+[style*="background: #f0f0f5"], [style*="background:#f0f0f5"], 
+[style*="background: #f4f4f4"], [style*="background:#f4f4f4"], 
+[style*="background: #f9f9f9"], [style*="background:#fcfcfc"], 
+[style*="background:#fff5f0"], [style*="background: #fff3e0"], 
+[style*="background: #fff9f0"] {
+    background-color: #2c2c2e !important;
+    border-color: #444 !important;
+}
+[style*="border: 1px solid #ddd"], [style*="border:1px solid #eee"], [style*="border-bottom:1px solid #eee"] {
+    border-color: #444 !important;
+}
+::placeholder {
+    color: #666666 !important;
+}
+
+/* ==================================================
+   DASHBOARD THEME UPGRADES
+   ================================================== */
+#report-summary > div:nth-child(1) {
+    background: linear-gradient(145deg, #1c1c1e, #252528) !important;
+    border: 1px solid #007aff !important;
+    box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2) !important;
+    color: #4da6ff !important;
+    text-shadow: 1px 1px 2px #000 !important;
+}
+#report-summary > div:nth-child(2) {
+    background: linear-gradient(145deg, #1c1c1e, #252528) !important;
+    border: 1px solid #ff5e00 !important;
+    box-shadow: 0 4px 15px rgba(255, 94, 0, 0.2) !important;
+    color: #ff9d4d !important;
+    text-shadow: 1px 1px 2px #000 !important;
+}
+#report-summary > div:nth-child(3) {
+    background: linear-gradient(145deg, #1c1c1e, #252528) !important;
+    border: 1px solid #b026ff !important;
+    box-shadow: 0 4px 15px rgba(176, 38, 255, 0.2) !important;
+    color: #d98cff !important;
+    text-shadow: 1px 1px 2px #000 !important;
+}
+#report-summary > div:nth-child(4) {
+    background: linear-gradient(145deg, #1c1c1e, #252528) !important;
+    border: 1px solid #39ff14 !important;
+    box-shadow: 0 4px 15px rgba(57, 255, 20, 0.2) !important;
+    color: #8cff73 !important;
+    text-shadow: 1px 1px 2px #000 !important;
+}
+#report-summary > div > div {
+    color: inherit !important;
+    text-shadow: inherit !important;
+}
+
+/* =============================================
+   WORKOUT CALENDAR
+   ============================================= */
+#workout-calendar-wrap {
+    position: relative;
+    background: #1c1c1e;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+#workout-calendar-wrap::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+    z-index: -1;
+}
+
+.cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.cal-nav-btn {
+    background: #2c2c2e !important;
+    border: 1px solid #444 !important;
+    border-bottom: 2px solid #555 !important;
+    color: #ff5e00 !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    padding: 4px 14px !important;
+    border-radius: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.cal-month-title {
+    font-weight: 800;
+    font-size: 1.05em;
+    background: linear-gradient(90deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 0.5px;
+}
+
+.cal-day-labels {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 4px;
+}
+
+.cal-day-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #555;
+    padding: 4px 0;
+    letter-spacing: 0.5px;
+}
+
+.cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+
+.cal-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #444;
+    user-select: none;
+}
+
+.cal-day.cal-empty {
+    pointer-events: none;
+}
+
+.cal-day.cal-has-workout {
+    color: #e0e0e0;
+    cursor: pointer;
+    background: rgba(57, 255, 20, 0.07);
+}
+
+.cal-day.cal-has-workout:active {
+    transform: scale(0.88);
+}
+
+.cal-day.cal-today {
+    border: 1px solid #ff5e00;
+    color: #ff9d4d;
+}
+
+.cal-day.cal-selected {
+    background: rgba(57, 255, 20, 0.18) !important;
+    color: #39ff14 !important;
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.35);
+}
+
+.cal-dot {
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #39ff14;
+    box-shadow: 0 0 6px rgba(57, 255, 20, 0.9);
+    margin-top: 2px;
+}
+
+/* Day summary panel */
+#cal-day-summary {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #2a2a2a;
+}
+
+.cal-summary-date {
+    font-size: 0.9em;
+    font-weight: 700;
+    color: #ff5e00;
+    text-shadow: 0 0 8px rgba(255, 94, 0, 0.4);
+    margin-bottom: 10px;
+}
+
+.cal-summary-workout {
+    background: #252528;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border: 1px solid #333;
+}
+
+.cal-summary-name {
+    font-weight: 700;
+    font-size: 0.95em;
+    color: #b026ff;
+    text-shadow: 0 0 8px rgba(176, 38, 255, 0.4);
+    margin-bottom: 6px;
+}
+
+.cal-summary-meta {
+    font-size: 0.82em;
+    color: #888;
+    margin-bottom: 6px;
+}
+
+.cal-summary-ex {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #2a2a2a;
+    font-size: 0.83em;
+}
+
+.cal-summary-ex:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.cal-ex-name {
+    color: #e0e0e0;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.cal-ex-sets {
+    color: #777;
+    text-align: right;
 }

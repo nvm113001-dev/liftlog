@@ -5,45 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LiftLog - Login</title>
     <style>
+        @keyframes synthwaveFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(-45deg, #0d0d12, #1a1025, #0a1510, #25120f);
+            background-size: 400% 400%;
+            animation: synthwaveFlow 20s ease infinite;
             margin: 0;
-            height: 100vh;
+            min-height: 100vh;
+            padding: 24px;
+            box-sizing: border-box;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         .login-box {
-            background: white;
+            position: relative;
+            background: #1c1c1e;
             padding: 50px 40px;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
             text-align: center;
             max-width: 400px;
             width: 90%;
         }
+        .login-box::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 22px;
+            background: linear-gradient(90deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+            z-index: -1;
+        }
         h1 {
             margin: 0 0 10px 0;
             font-size: 2.8em;
+            background: linear-gradient(90deg, #39ff14, #ff107a, #b026ff, #ff5e00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
         }
         p {
-            color: #555;
+            color: #aaaaaa;
             margin-bottom: 40px;
         }
         button {
-            background: #4285F4;
-            color: white;
-            border: none;
+            background: linear-gradient(145deg, #b026ff, #7a00cc);
+            color: #ffffff;
+            border: 1px solid #5e00a3;
+            border-bottom: 4px solid #5e00a3;
             padding: 18px 40px;
             font-size: 18px;
+            font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
             width: 100%;
-            box-shadow: 0 6px 15px rgba(66,133,244,0.3);
+            box-shadow: 0 6px 15px rgba(176,38,255,0.4);
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            transition: all 0.1s ease;
         }
-        button:hover {
-            background: #3367d6;
+        button:active {
+            transform: scale(0.98) translateY(3px);
+            border-bottom: 1px solid #5e00a3;
+            box-shadow: 0 2px 5px rgba(176,38,255,0.5);
         }
     </style>
 </head>
@@ -51,19 +79,59 @@
     <div class="login-box">
         <h1>💪 LiftLog</h1>
         <p>Personal Workout Tracker</p>
-        
+
+        <!-- Error banner -->
+        <div id="error-banner" style="display:none; background:rgba(255,59,48,0.15); border:1px solid rgba(255,59,48,0.4); color:#ff6b6b; padding:12px 16px; border-radius:10px; font-size:14px; margin-bottom:20px;"></div>
+
+        <!-- Owner login -->
         <button onclick="startGoogleLogin()">
             🔑 Sign in with Google
         </button>
-        
-        <p style="margin-top: 30px; color: #777; font-size: 14px;">
-            Only approved emails can access
+
+        <!-- Invite code section -->
+        <div style="margin-top:28px; border-top:1px solid #333; padding-top:24px;">
+            <p style="color:#888; font-size:13px; margin:0 0 12px;">Have an invite code?</p>
+            <input type="text" id="invite-code-input"
+                   placeholder="Enter invite code"
+                   style="width:100%; padding:14px; background:#2c2c2e; border:1px solid #444; color:#fff; border-radius:10px; font-size:16px; letter-spacing:2px; text-align:center; box-sizing:border-box; margin-bottom:10px;"
+                   oninput="this.value = this.value.trim()" />
+            <button onclick="startInviteLogin()" style="background:linear-gradient(145deg,#39ff14,#1a8f0b); border-color:#1a8f0b; border-bottom-color:#0d5c06;">
+                ✅ Sign in with Invite
+            </button>
+        </div>
+
+        <p style="margin-top:24px; color:#555; font-size:12px;">
+            Only approved accounts can access
         </p>
     </div>
 
     <script>
+        // Show error if redirected back with ?error=
+        const params = new URLSearchParams(window.location.search);
+        const err = params.get('error');
+        if (err) {
+            const banner = document.getElementById('error-banner');
+            banner.style.display = 'block';
+            if (err === 'denied') {
+                banner.textContent = 'This Google account is not approved. Use an invite code or contact the owner.';
+            } else if (err === 'invalid_invite') {
+                banner.textContent = 'That invite code is invalid or has expired. Ask the owner for a new one.';
+            } else {
+                banner.textContent = 'Login failed. Please try again.';
+            }
+        }
+
         function startGoogleLogin() {
             window.location.href = '/auth/google';
+        }
+
+        function startInviteLogin() {
+            const code = document.getElementById('invite-code-input').value.trim();
+            if (!code) {
+                document.getElementById('invite-code-input').style.borderColor = '#ff3b30';
+                return;
+            }
+            window.location.href = '/auth/google?invite=' + encodeURIComponent(code);
         }
 
         // If already logged in, go straight to app

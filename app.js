@@ -1,3 +1,96 @@
+let calendarDate = new Date();
+
+function renderCalendar() {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+
+    // Build workout date lookup
+    const workoutDates = {};
+    workouts.forEach(wk => {
+        if (!wk.date) return;
+        if (!workoutDates[wk.date]) workoutDates[wk.date] = [];
+        workoutDates[wk.date].push(wk);
+    });
+
+    // Header label
+    document.getElementById('cal-month-title').textContent =
+        calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    let html = '';
+    for (let i = 0; i < firstDayOfWeek; i++) html += '<div class="cal-day cal-empty"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const hasWorkout = !!workoutDates[dateStr];
+        const isToday = dateStr === todayStr;
+        let cls = 'cal-day' + (hasWorkout ? ' cal-has-workout' : '') + (isToday ? ' cal-today' : '');
+        const click = hasWorkout ? `onclick="showDaySummary('${dateStr}')"` : '';
+        html += `<div class="${cls}" ${click}>${d}${hasWorkout ? '<span class="cal-dot"></span>' : ''}</div>`;
+    }
+
+    document.getElementById('cal-days').innerHTML = html;
+    document.getElementById('cal-day-summary').innerHTML = '';
+}
+
+function calPrev() { calendarDate.setMonth(calendarDate.getMonth() - 1); renderCalendar(); }
+function calNext() { calendarDate.setMonth(calendarDate.getMonth() + 1); renderCalendar(); }
+
+function jumpCalendar(year, month) {
+    calendarDate = new Date(year, month, 1);
+    renderCalendar();
+    document.getElementById('workout-calendar-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function showDaySummary(dateStr) {
+    document.querySelectorAll('.cal-day.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+    document.querySelectorAll('.cal-day').forEach(el => {
+        if (el.getAttribute('onclick') === `showDaySummary('${dateStr}')`) el.classList.add('cal-selected');
+    });
+
+    const panel = document.getElementById('cal-day-summary');
+    const paired = pairWorkoutsWithWatchData(workouts).filter(wk => wk.date === dateStr);
+    if (!paired.length) { panel.innerHTML = ''; return; }
+
+    const dateObj = new Date(dateStr + 'T12:00:00');
+    const formatted = dateObj.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    let html = `<div class="cal-summary-date">${formatted}</div>`;
+
+    paired.forEach(wk => {
+        const themeColor = getWorkoutColor(wk);
+        const isCardio = isCardioWorkout(wk) && !hasStrengthExercises(wk);
+        const metrics = normalizeWatchMetrics(wk);
+        const cardioStats = renderWatchMetricGrid(metrics, isCardio);
+
+        const exHTML = (wk.exercises || []).map(ex => {
+            const setsHTML = (ex.sets || []).map(s => {
+                const wStr = String(s.weight).toUpperCase();
+                const displayWeight = (wStr === 'BW' || wStr === '0') ? 'BW' : s.weight + 'lbs';
+                return `<span style="display:inline-block; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); padding:3px 8px; border-radius:6px; margin:3px 4px 0 0; font-size:12px; color:#ccc; text-shadow:1px 1px 1px #000;">${displayWeight} × ${s.reps}</span>`;
+            }).join('');
+            const noteHTML = ex.note ? `<div style="color:#888; font-style:italic; font-size:12px; margin-top:4px;">📝 ${ex.note}</div>` : '';
+            return `<div style="margin-bottom:12px;">
+                <strong style="color:#fff; letter-spacing:0.5px;">${ex.name || 'Unknown'}</strong>
+                ${noteHTML}
+                <div style="margin-top:4px;">${setsHTML}</div>
+            </div>`;
+        }).join('');
+
+        html += `<div class="cal-summary-workout" style="border-left:3px solid ${themeColor};">
+            <div class="cal-summary-name" style="color:${themeColor}; text-shadow:0 0 8px ${themeColor}60;">${wk.name || 'Workout'}</div>
+            ${cardioStats}
+            ${exHTML}
+        </div>`;
+    });
+
+    panel.innerHTML = html;
+}
+
 function getAuthHeader() {
     const token = localStorage.getItem('liftlog_token');
     return token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -287,6 +380,12 @@ function showSection(section) {
         section = 'progress';
     }
 
+    // Update bottom nav active state
+    const navSection = section === 'edit-template' ? 'templates' : section;
+    document.querySelectorAll('#bottom-nav button').forEach(btn => {
+        btn.classList.toggle('nav-active', btn.dataset.section === navSection);
+    });
+
     // 1. Hide EVERY section using both class AND direct style
     document.querySelectorAll('.section').forEach(s => {
         s.classList.remove('active');
@@ -337,6 +436,7 @@ function showSection(section) {
         setTimeout(() => {
             if (typeof showSettingsTab === 'function') showSettingsTab('import');
         }, 10);
+        loadAppleHealthTokenStatus();
     }
 }
 
@@ -398,34 +498,54 @@ function normalizeWatchMetrics(wk) {
     if (!wk) return null;
 
     const watch = wk.watchData && typeof wk.watchData === 'object' ? wk.watchData : {};
+
+    // `appleHealth` sub-object is present on merged workouts (Strava + Apple Health import)
+    const ah = watch.appleHealth || null;
+
+    // When Apple Health data is present, prefer it for HR and calorie metrics
+    // (Apple Watch is more accurate for these than Strava, especially for strength workouts)
+    const hrSrc = ah || watch;
+
+    // Source label drives which display template is used in renderWatchMetricGrid
+    const source = ah ? 'AppleHealth' : (watch.source || 'Strava');
+
     return {
-        name: watch.name || wk.name || 'Watch Activity',
-        type: watch.type || watch.sportType || wk.type || '',
-        sportType: watch.sportType || watch.type || wk.type || '',
-        distance: parseFloat(watch.distance ?? wk.distance ?? 0) || 0,
-        duration: parseInt(watch.duration ?? wk.duration ?? 0, 10) || 0,
-        elapsedTime: parseInt(watch.elapsedTime ?? wk.elapsedTime ?? 0, 10) || 0,
-        hr: parseInt(watch.hr ?? wk.hr ?? 0, 10) || 0,
-        maxHr: parseInt(watch.maxHr ?? wk.maxHr ?? 0, 10) || 0,
-        calories: parseInt(watch.calories ?? wk.calories ?? 0, 10) || 0,
-        pace: watch.pace || wk.pace || '',
-        elevation: parseFloat(watch.elevation ?? wk.elevation ?? 0) || 0,
-        elevationHigh: parseFloat(watch.elevationHigh ?? wk.elevationHigh ?? 0) || 0,
-        elevationLow: parseFloat(watch.elevationLow ?? wk.elevationLow ?? 0) || 0,
-        averageSpeed: parseFloat(watch.averageSpeed ?? wk.averageSpeed ?? 0) || 0,
-        maxSpeed: parseFloat(watch.maxSpeed ?? wk.maxSpeed ?? 0) || 0,
-        averageCadence: parseFloat(watch.averageCadence ?? wk.averageCadence ?? 0) || 0,
-        averageWatts: parseFloat(watch.averageWatts ?? wk.averageWatts ?? 0) || 0,
+        name:                 watch.name || wk.name || 'Watch Activity',
+        type:                 watch.type || watch.sportType || wk.type || '',
+        sportType:            watch.sportType || watch.type || wk.type || '',
+        // Distance: prefer Strava GPS for merged workouts, fall back to AH
+        distance:             parseFloat(watch.distance ?? ah?.distance ?? wk.distance ?? 0) || 0,
+        // ah.duration covers new imports; ah.durationMinutes covers old stored records
+        duration:             parseInt((ah?.duration ?? ah?.durationMinutes) ?? watch.duration ?? wk.duration ?? 0, 10) || 0,
+        elapsedTime:          parseInt(watch.elapsedTime ?? wk.elapsedTime ?? 0, 10) || 0,
+        // HR: prefer Apple Health; ah.hr covers new imports, ah.avgHeartRate covers old stored records
+        hr:                   parseInt((ah?.hr ?? ah?.avgHeartRate) ?? watch.hr ?? wk.hr ?? 0, 10) || 0,
+        maxHr:                parseInt((ah?.maxHr ?? ah?.maxHeartRate) ?? watch.maxHr ?? wk.maxHr ?? 0, 10) || 0,
+        minHr:                parseInt(ah?.minHr ?? 0, 10) || 0,
+        // Calories: prefer Apple Health
+        calories:             parseInt((ah?.calories ?? null) ?? watch.calories ?? wk.calories ?? 0, 10) || 0,
+        totalCalories:        parseInt((ah?.totalCalories ?? null) ?? 0, 10) || 0,
+        // Pace: prefer Strava GPS, then AH computed pace
+        pace:                 watch.pace || ah?.pace || wk.pace || '',
+        // Strava-specific fields (preserved for Strava cardio display)
+        elevation:            parseFloat(watch.elevation ?? wk.elevation ?? 0) || 0,
+        elevationHigh:        parseFloat(watch.elevationHigh ?? wk.elevationHigh ?? 0) || 0,
+        elevationLow:         parseFloat(watch.elevationLow ?? wk.elevationLow ?? 0) || 0,
+        averageSpeed:         parseFloat(watch.averageSpeed ?? wk.averageSpeed ?? 0) || 0,
+        maxSpeed:             parseFloat(watch.maxSpeed ?? wk.maxSpeed ?? 0) || 0,
+        averageCadence:       parseFloat(watch.averageCadence ?? wk.averageCadence ?? 0) || 0,
+        averageWatts:         parseFloat(watch.averageWatts ?? wk.averageWatts ?? 0) || 0,
         weightedAverageWatts: parseFloat(watch.weightedAverageWatts ?? wk.weightedAverageWatts ?? 0) || 0,
-        kilojoules: parseFloat(watch.kilojoules ?? wk.kilojoules ?? 0) || 0,
-        sufferScore: parseInt(watch.sufferScore ?? wk.sufferScore ?? 0, 10) || 0,
-        achievementCount: parseInt(watch.achievementCount ?? wk.achievementCount ?? 0, 10) || 0,
-        kudosCount: parseInt(watch.kudosCount ?? wk.kudosCount ?? 0, 10) || 0,
-        trainer: Boolean(watch.trainer ?? wk.trainer),
-        commute: Boolean(watch.commute ?? wk.commute),
-        manual: Boolean(watch.manual ?? wk.manual),
-        startTime: watch.startTime || wk.startTime || '',
-        source: watch.source || 'Strava'
+        kilojoules:           parseFloat(watch.kilojoules ?? wk.kilojoules ?? 0) || 0,
+        sufferScore:          parseInt(watch.sufferScore ?? wk.sufferScore ?? 0, 10) || 0,
+        achievementCount:     parseInt(watch.achievementCount ?? wk.achievementCount ?? 0, 10) || 0,
+        kudosCount:           parseInt(watch.kudosCount ?? wk.kudosCount ?? 0, 10) || 0,
+        trainer:              Boolean(watch.trainer ?? wk.trainer),
+        commute:              Boolean(watch.commute ?? wk.commute),
+        manual:               Boolean(watch.manual ?? wk.manual),
+        startTime:            watch.startTime || ah?.startTime || wk.startTime || '',
+        source,
+        appleActivityType:    ah?.appleActivityType || watch.appleActivityType || '',
     };
 }
 
@@ -433,10 +553,22 @@ function normalizeWatchMetrics(wk) {
 
 let exerciseStats = {};
 
+// Helper to get estimated 1RM safely (handles case and whitespace)
+function getEstimated1RM(exerciseName) {
+    if (!exerciseName) return null;
+    const name = exerciseName.trim().toLowerCase();
+    for (const key in exerciseStats) {
+        if (key.trim().toLowerCase() === name) return exerciseStats[key];
+    }
+    return null;
+}
+
 // Load latest 1RM stats from the server when the app starts
 async function loadExerciseStats() {
     try {
-        const response = await fetch('/exercise_stats');
+        const response = await fetch('/exercise_stats', {
+            headers: getAuthHeader()
+        });
         if (response.ok) {
             exerciseStats = await response.json();
             console.log("✅ Loaded 45-day 1RM stats from server", exerciseStats);
@@ -463,7 +595,8 @@ function getLastWorkoutForExercise(exerciseName) {
             return {
                 date: workout.date,
                 avgWeight: Math.round(totalWeight / match.sets.length),
-                avgReps: (totalReps / match.sets.length).toFixed(1)
+                avgReps: (totalReps / match.sets.length).toFixed(1),
+                sets: match.sets
             };
         }
     }
@@ -486,44 +619,87 @@ function formatStartTime(startTime) {
 function renderWatchMetricGrid(metrics, isCardio) {
     if (!metrics) return '';
 
+    const isAppleHealth = metrics.source === 'AppleHealth';
+
+    if (isAppleHealth) {
+        const durationStr = metrics.duration ? `${metrics.duration} min` : '';
+        let rows;
+
+        if (isCardio) {
+            rows = [
+                ['Duration',   durationStr],
+                ['Distance',   metrics.distance ? `${metrics.distance.toFixed(2)} mi` : ''],
+                ['Avg Pace',   metrics.pace || ''],
+                ['Active Cal', metrics.calories ? `${metrics.calories} cal` : ''],
+                ['Total Cal',  metrics.totalCalories ? `${metrics.totalCalories} cal` : ''],
+                ['Avg HR',     metrics.hr ? `${metrics.hr} bpm` : ''],
+                ['Max HR',     metrics.maxHr ? `${metrics.maxHr} bpm` : ''],
+                ['Min HR',     metrics.minHr ? `${metrics.minHr} bpm` : ''],
+            ];
+        } else {
+            rows = [
+                ['Duration',   durationStr],
+                ['Active Cal', metrics.calories ? `${metrics.calories} cal` : ''],
+                ['Total Cal',  metrics.totalCalories ? `${metrics.totalCalories} cal` : ''],
+                ['Avg HR',     metrics.hr ? `${metrics.hr} bpm` : ''],
+                ['Max HR',     metrics.maxHr ? `${metrics.maxHr} bpm` : ''],
+                ['Min HR',     metrics.minHr ? `${metrics.minHr} bpm` : ''],
+            ];
+        }
+
+        rows = rows.filter(([, v]) => v !== '' && v != null);
+        if (rows.length === 0) return '';
+
+        const label = isCardio ? 'Cardio' : 'Strength';
+        return `
+            <div style="background: rgba(0,0,0,0.2); padding:12px; border-radius:12px; margin-bottom:12px; font-size:13px; border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+                <strong style="color: #ccc; letter-spacing: 0.5px; display: block; margin-bottom: 10px; text-transform: uppercase; font-size: 11px;">${label} · Apple Health 🍎</strong>
+                <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px;">
+                    ${rows.map(([lbl, value]) => `
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                            <div style="font-size:10px; text-transform:uppercase; color:#888; letter-spacing:0.5px; margin-bottom: 2px;">${lbl}</div>
+                            <strong style="display:block; color:#fff; text-shadow: 1px 1px 2px #000; overflow-wrap:anywhere;">${value}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Strava / other source — full metric dump
     const metricRows = [
-        ['Activity', metrics.name],
-        ['Type', metrics.sportType || metrics.type],
-        ['Start', formatStartTime(metrics.startTime)],
-        ['Moving', metrics.duration ? `${metrics.duration} min` : ''],
-        ['Elapsed', metrics.elapsedTime ? `${metrics.elapsedTime} min` : ''],
-        ['Distance', metrics.distance ? `${metrics.distance.toFixed(2)} mi` : ''],
-        ['Pace', metrics.pace],
-        ['Avg HR', metrics.hr ? `${metrics.hr} bpm` : ''],
-        ['Max HR', metrics.maxHr ? `${metrics.maxHr} bpm` : ''],
-        ['Calories', metrics.calories ? `${metrics.calories} cal` : ''],
-        ['Elevation', metrics.elevation ? `${Math.round(metrics.elevation)} ft` : ''],
-        ['Elev High', metrics.elevationHigh ? `${Math.round(metrics.elevationHigh)} ft` : ''],
-        ['Elev Low', metrics.elevationLow ? `${Math.round(metrics.elevationLow)} ft` : ''],
-        ['Avg Speed', metrics.averageSpeed ? `${metersPerSecondToMph(metrics.averageSpeed)} mph` : ''],
-        ['Max Speed', metrics.maxSpeed ? `${metersPerSecondToMph(metrics.maxSpeed)} mph` : ''],
-        ['Cadence', metrics.averageCadence ? `${metrics.averageCadence.toFixed(1)}` : ''],
-        ['Avg Watts', metrics.averageWatts ? `${Math.round(metrics.averageWatts)} W` : ''],
-        ['Weighted W', metrics.weightedAverageWatts ? `${Math.round(metrics.weightedAverageWatts)} W` : ''],
-        ['Kilojoules', metrics.kilojoules ? `${Math.round(metrics.kilojoules)} kJ` : ''],
-        ['Effort', metrics.sufferScore ? `${metrics.sufferScore}` : ''],
+        ['Elapsed',      metrics.elapsedTime ? `${metrics.elapsedTime} min` : ''],
+        ['Distance',     metrics.distance ? `${metrics.distance.toFixed(2)} mi` : ''],
+        ['Pace',         metrics.pace],
+        ['Avg HR',       metrics.hr ? `${metrics.hr} bpm` : ''],
+        ['Max HR',       metrics.maxHr ? `${metrics.maxHr} bpm` : ''],
+        ['Calories',     metrics.calories ? `${metrics.calories} cal` : ''],
+        ['Elevation',    metrics.elevation ? `${Math.round(metrics.elevation)} ft` : ''],
+        ['Elev High',    metrics.elevationHigh ? `${Math.round(metrics.elevationHigh)} ft` : ''],
+        ['Elev Low',     metrics.elevationLow ? `${Math.round(metrics.elevationLow)} ft` : ''],
+        ['Avg Speed',    metrics.averageSpeed ? `${metersPerSecondToMph(metrics.averageSpeed)} mph` : ''],
+        ['Max Speed',    metrics.maxSpeed ? `${metersPerSecondToMph(metrics.maxSpeed)} mph` : ''],
+        ['Cadence',      metrics.averageCadence ? `${metrics.averageCadence.toFixed(1)}` : ''],
+        ['Avg Watts',    metrics.averageWatts ? `${Math.round(metrics.averageWatts)} W` : ''],
+        ['Weighted W',   metrics.weightedAverageWatts ? `${Math.round(metrics.weightedAverageWatts)} W` : ''],
+        ['Kilojoules',   metrics.kilojoules ? `${Math.round(metrics.kilojoules)} kJ` : ''],
+        ['Effort',       metrics.sufferScore ? `${metrics.sufferScore}` : ''],
         ['Achievements', metrics.achievementCount ? `${metrics.achievementCount}` : ''],
-        ['Kudos', metrics.kudosCount ? `${metrics.kudosCount}` : ''],
-        ['Trainer', metrics.trainer ? 'Yes' : ''],
-        ['Commute', metrics.commute ? 'Yes' : ''],
-        ['Manual', metrics.manual ? 'Yes' : '']
+        ['Kudos',        metrics.kudosCount ? `${metrics.kudosCount}` : ''],
+        ['Commute',      metrics.commute ? 'Yes' : ''],
+        ['Manual',       metrics.manual ? 'Yes' : '']
     ].filter(([, value]) => value !== '' && value !== null && value !== undefined);
 
     if (metricRows.length === 0) return '';
 
     return `
-        <div style="background:#fff5f0; padding:12px; border-radius:8px; margin-bottom:10px; font-size:13px; color:#e65100; border: 1px solid #ffdecb;">
-            <strong>${isCardio ? 'Activity' : 'Watch Data'} (${metrics.source || 'Strava'}):</strong>
-            <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-top:10px;">
+        <div style="background: rgba(0,0,0,0.2); padding:12px; border-radius:12px; margin-bottom:12px; font-size:13px; border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+            <strong style="color: #ccc; letter-spacing: 0.5px; display: block; margin-bottom: 10px; text-transform: uppercase; font-size: 11px;">${isCardio ? 'Cardio' : 'Watch Metrics'} (${metrics.source || 'Strava'})</strong>
+            <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px;">
                 ${metricRows.map(([label, value]) => `
-                    <div style="background:white; border:1px solid #ffe1d0; border-radius:7px; padding:7px;">
-                        <div style="font-size:10px; text-transform:uppercase; color:#a84b00; letter-spacing:0;">${label}</div>
-                        <strong style="display:block; color:#3a2a1f; margin-top:2px; overflow-wrap:anywhere;">${value}</strong>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                        <div style="font-size:10px; text-transform:uppercase; color:#888; letter-spacing:0.5px; margin-bottom: 2px;">${label}</div>
+                        <strong style="display:block; color:#fff; text-shadow: 1px 1px 2px #000; overflow-wrap:anywhere;">${value}</strong>
                     </div>
                 `).join('')}
             </div>
@@ -638,6 +814,7 @@ function renderReports() {
             totalMinutes += parseInt(wk.duration);
         }
 
+
         if (hasStrengthExercises(wk)) {
             wk.exercises.forEach(ex => {
                 const cleanName = ex.name;
@@ -691,25 +868,35 @@ function renderReports() {
         </div>
     `;
 
+    renderCalendar();
+
     const sortedMonths = Object.keys(monthlyCount).sort().reverse();
     monthContainer.innerHTML = sortedMonths.map(monthStr => {
         const [year, monthNum] = monthStr.split('-');
         const d = new Date(year, monthNum - 1);
         const name = d.toLocaleString('default', { month: 'long' });
-        return `<div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-            <span><strong>${name} ${year}</strong></span>
-            <strong style="color: #007aff;">${monthlyCount[monthStr].size} sessions</strong>
+        return `<div onclick="jumpCalendar(${year}, ${parseInt(monthNum)-1})" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid #333; cursor:pointer;">
+            <span style="font-weight:900; letter-spacing:0.5px; font-size:1.1em; color:#ffffff;">${name} ${year}</span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <strong style="font-size:1.1em; color:#ffffff;">${monthlyCount[monthStr].size} sessions</strong>
+                <span style="color:#ff5e00; font-size:1.1em;">›</span>
+            </div>
         </div>`;
-    }).join('') || '<p style="text-align:center; padding:20px;">No month data found.</p>';
+    }).join('') || '<p style="text-align:center; padding:20px; color:#aaa;">No month data found.</p>';
 
     const sortedExercises = Object.keys(exerciseData).sort((a, b) => exerciseData[b].totalVol - exerciseData[a].totalVol);
-    exListContainer.innerHTML = sortedExercises.map(name => {
+    const neonColors = ['#ff107a', '#b026ff', '#00e5ff', '#39ff14', '#ff5e00', '#007aff'];
+
+    exListContainer.innerHTML = sortedExercises.map((name, idx) => {
         const data = exerciseData[name];
         const display1RM = data.best1RM > 0 ? `${Math.round(data.best1RM)} lbs` : "N/A (BW)";
         
         const avgRIR = data.rirCount > 0 ? (data.rirSum / data.rirCount).toFixed(1) : null;
         const rirBadge = avgRIR !== null ? 
-            `<span style="font-size: 0.8em; color: #ff9500; background: #fff9f0; padding: 2px 8px; border-radius: 10px; margin-left:5px;">Avg RIR: ${avgRIR}</span>` : '';
+            `<span style="font-size: 0.7em; color: #ff5e00; background: rgba(255, 94, 0, 0.1); border: 1px solid rgba(255, 94, 0, 0.3); padding: 2px 8px; border-radius: 10px; margin-left:8px; vertical-align: middle; text-shadow: none;">Avg RIR: ${avgRIR}</span>` : '';
+
+        // Dynamic neon theme alternating for the cards
+        const themeColor = neonColors[idx % neonColors.length];
 
         // NEW: 1 RIR Projections Grid
         let projectionsHTML = '';
@@ -719,25 +906,31 @@ function renderReports() {
             const p8 = Math.round(data.best1RM * 0.76); 
             const p10 = Math.round(data.best1RM * 0.71); 
 
+            // Fixed columns colors for consistent 1 RIR targets grid
+            const c3 = { bg: 'rgba(255, 16, 122, 0.15)', border: '#ff107a', text: '#ff107a' }; // Pink
+            const c5 = { bg: 'rgba(176, 38, 255, 0.15)', border: '#b026ff', text: '#b026ff' }; // Purple
+            const c8 = { bg: 'rgba(0, 122, 255, 0.15)', border: '#007aff', text: '#4da6ff' }; // Blue
+            const c10 = { bg: 'rgba(0, 229, 255, 0.15)', border: '#00e5ff', text: '#00e5ff' }; // Cyan
+
             projectionsHTML = `
-                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #eee;">
-                    <div style="font-size: 0.7em; color: #999; margin-bottom: 4px; text-transform: uppercase;">1 RIR Targets</div>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center;">
-                        <div style="background: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 4px; padding: 4px;">
-                            <div style="font-size: 0.65em; color: #666;">3 Reps</div>
-                            <strong style="font-size: 0.85em;">${p3}</strong>
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size: 0.75em; color: ${themeColor}; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 0 5px ${themeColor}60;">1 RIR Targets</div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center;">
+                        <div style="background: ${c3.bg}; border: 1px solid ${c3.border}50; border-radius: 8px; padding: 8px; box-shadow: inset 0 2px 8px ${c3.border}30;">
+                            <div style="font-size: 0.7em; color: ${c3.text}; margin-bottom:2px; text-shadow: 0 0 5px ${c3.text}60;">3 Reps</div>
+                            <strong style="font-size: 1.1em; color: #fff; text-shadow: 0 0 8px ${c3.border}, 1px 1px 2px #000;">${p3}</strong>
                         </div>
-                        <div style="background: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 4px; padding: 4px;">
-                            <div style="font-size: 0.65em; color: #666;">5 Reps</div>
-                            <strong style="font-size: 0.85em;">${p5}</strong>
+                        <div style="background: ${c5.bg}; border: 1px solid ${c5.border}50; border-radius: 8px; padding: 8px; box-shadow: inset 0 2px 8px ${c5.border}30;">
+                            <div style="font-size: 0.7em; color: ${c5.text}; margin-bottom:2px; text-shadow: 0 0 5px ${c5.text}60;">5 Reps</div>
+                            <strong style="font-size: 1.1em; color: #fff; text-shadow: 0 0 8px ${c5.border}, 1px 1px 2px #000;">${p5}</strong>
                         </div>
-                        <div style="background: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 4px; padding: 4px;">
-                            <div style="font-size: 0.65em; color: #666;">8 Reps</div>
-                            <strong style="font-size: 0.85em;">${p8}</strong>
+                        <div style="background: ${c8.bg}; border: 1px solid ${c8.border}50; border-radius: 8px; padding: 8px; box-shadow: inset 0 2px 8px ${c8.border}30;">
+                            <div style="font-size: 0.7em; color: ${c8.text}; margin-bottom:2px; text-shadow: 0 0 5px ${c8.text}60;">8 Reps</div>
+                            <strong style="font-size: 1.1em; color: #fff; text-shadow: 0 0 8px ${c8.border}, 1px 1px 2px #000;">${p8}</strong>
                         </div>
-                        <div style="background: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 4px; padding: 4px;">
-                            <div style="font-size: 0.65em; color: #666;">10 Reps</div>
-                            <strong style="font-size: 0.85em;">${p10}</strong>
+                        <div style="background: ${c10.bg}; border: 1px solid ${c10.border}50; border-radius: 8px; padding: 8px; box-shadow: inset 0 2px 8px ${c10.border}30;">
+                            <div style="font-size: 0.7em; color: ${c10.text}; margin-bottom:2px; text-shadow: 0 0 5px ${c10.text}60;">10 Reps</div>
+                            <strong style="font-size: 1.1em; color: #fff; text-shadow: 0 0 8px ${c10.border}, 1px 1px 2px #000;">${p10}</strong>
                         </div>
                     </div>
                 </div>
@@ -745,14 +938,14 @@ function renderReports() {
         }
 
         return `
-            <div class="exercise" style="margin-bottom: 12px; border-left: 5px solid #5856d6; padding: 12px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
-                    <strong style="font-size: 1.1em;">${name} ${rirBadge}</strong>
-                    <span style="font-size: 0.8em; color: #666; background: #f0f0f5; padding: 2px 8px; border-radius: 10px;">${data.count} sessions</span>
+            <div class="exercise" style="margin-bottom: 16px; padding: 16px; background: #1c1c1e !important; border-radius: 12px; border: 1px solid ${themeColor} !important; box-shadow: 0 8px 25px rgba(0,0,0,0.6), 0 0 12px ${themeColor}40 !important; border-left: 4px solid ${themeColor} !important;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 8px;">
+                    <strong style="font-size: 1.2em; color: ${themeColor}; text-shadow: 0 0 8px ${themeColor}60, 1px 1px 2px #000;">${name} ${rirBadge}</strong>
+                    <span style="font-size: 0.8em; color: #ccc; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 12px;">${data.count} sessions</span>
                 </div>
-                <div style="display:flex; justify-content:space-between; font-size: 0.9em; color: #333;">
-                    <span>Est. 1RM: <strong style="color: #007aff;">${display1RM}</strong></span>
-                    <span>Total Vol: <strong>${(data.totalVol / 1000).toFixed(1)}k lbs</strong></span>
+                <div style="display:flex; justify-content:space-between; font-size: 0.95em; color: #ddd; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                    <span>Est. 1RM: <strong style="color: #fff; text-shadow: 1px 1px 2px #000;">${display1RM}</strong></span>
+                    <span>Total Vol: <strong style="color: #fff; text-shadow: 1px 1px 2px #000;">${(data.totalVol / 1000).toFixed(1)}k lbs</strong></span>
                 </div>
                 ${projectionsHTML}
             </div>
@@ -774,22 +967,28 @@ function renderTemplates() {
             ? tmpl.exercises.map(ex => ex.name).join(', ') 
             : '<em>No exercises added yet</em>';
 
+        // Apply dynamic neon theme colors based on template name
+        const themeColor = getWorkoutColor({ name: tmpl.name });
+        div.style.setProperty('border', `1px solid ${themeColor}`, 'important');
+        div.style.setProperty('box-shadow', `0 8px 25px rgba(0,0,0,0.6), 0 0 12px ${themeColor}40`, 'important');
+        div.style.setProperty('border-left', `4px solid ${themeColor}`, 'important');
+
         div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <strong style="font-size: 1.25em; color: #007aff;">${tmpl.name}</strong>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <strong style="font-size: 1.3em; color:${themeColor}; text-shadow: 0 0 8px ${themeColor}60, 1px 1px 2px #000; letter-spacing: 0.5px;">${tmpl.name}</strong>
                 <div style="display: flex; gap: 5px;">
-                    <button onclick="renameTemplate(${idx})" style="width: auto; padding: 4px 8px; font-size: 11px; background: #8e8e93;">Rename</button>
-                    <button onclick="deleteTemplate(${idx})" style="width: auto; padding: 4px 8px; font-size: 11px; background: #ff3b30;">Delete</button>
+                    <button onclick="renameTemplate(${idx})" style="background:rgba(255,255,255,0.1) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow:none !important; border-bottom:1px solid rgba(255,255,255,0.2) !important; width:auto; font-size:12px; padding:6px 10px; border-radius:8px; text-shadow:none !important;">Rename</button>
+                    <button onclick="deleteTemplate(${idx})" style="background:rgba(255,59,48,0.1) !important; color:#ff3b30 !important; border:1px solid rgba(255,59,48,0.3) !important; box-shadow:none !important; border-bottom:1px solid rgba(255,59,48,0.3) !important; width:auto; font-size:12px; padding:6px 10px; border-radius:8px; text-shadow:none !important;">Delete</button>
                 </div>
             </div>
             
-            <div style="margin-bottom: 15px; font-size: 0.95em; color: #555; line-height: 1.4; font-style: italic;">
+            <div style="margin-bottom: 15px; font-size: 0.95em; color: #bbb; line-height: 1.4; font-style: italic;">
                 ${exercisePreview}
             </div>
 
             <div style="display: flex; gap: 10px;">
-                <button onclick="editTemplate(${idx})" style="flex: 1; padding: 10px;">Edit</button>
-                <button onclick="startFromTemplateByIndex(${idx})" style="flex: 1; padding: 10px; background: #34c759;">Start Workout</button>
+                <button onclick="editTemplate(${idx})" style="flex: 1; padding: 10px; font-size: 14px; background: linear-gradient(145deg, #2a2a2e, #1c1c1e) !important; color: ${themeColor} !important; border: 1px solid ${themeColor}80 !important; border-bottom: 3px solid ${themeColor}80 !important; text-shadow: 1px 1px 2px #000 !important;">Edit</button>
+                <button onclick="startFromTemplateByIndex(${idx})" style="flex: 1; padding: 10px; font-size: 14px; background: linear-gradient(145deg, ${themeColor}, ${themeColor}cc) !important; color: #fff !important; border: 1px solid ${themeColor} !important; border-bottom: 3px solid ${themeColor}80 !important; text-shadow: 1px 1px 2px #000 !important;">Start Workout</button>
             </div>
         `;
         list.appendChild(div);
@@ -871,7 +1070,7 @@ function startFromTemplateByIndex(idx) {
         ex.sets = []; 
         
         for (let i = 0; i < count; i++) {
-            ex.sets.push({ reps: reps, weight: 0 });
+            ex.sets.push({ reps: reps, weight: '' });
         }
     });
 
@@ -887,11 +1086,33 @@ function renderActiveWorkout() {
 
         currentWorkout.exercises.forEach((ex, exIdx) => {
         const lastWorkout = getLastWorkoutForExercise(ex.name);
-        const historyHTML = lastWorkout 
-            ? `<p style="font-size:0.85em; color:#888; margin:8px 0 12px 0;">
-                 Last time (${lastWorkout.date}): ${ex.sets.length} sets × avg <strong>${lastWorkout.avgWeight} lbs</strong> for <strong>${lastWorkout.avgReps} reps</strong>
-               </p>` 
-            : '';
+        
+        let placeholderText = "Add a note (e.g. 'felt heavy')";
+        let lastTimeHTML = '';
+        
+        if (lastWorkout && lastWorkout.sets) {
+            // Format date from YYYY-MM-DD to m/d/yy (no leading zeros)
+            let formattedDate = lastWorkout.date;
+            const parts = lastWorkout.date.split('-');
+            if (parts.length === 3) {
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                formattedDate = `${m}/${d}/${parts[0].slice(-2)}`;
+            }
+            
+            const setDetailsHTML = lastWorkout.sets.map(s => {
+                const wStr = String(s.weight).toUpperCase();
+                const displayWeight = (wStr === 'BW' || wStr === '0') ? 'BW' : s.weight;
+                return `<div>${displayWeight}x${s.reps}</div>`;
+            }).join('');
+            
+            lastTimeHTML = `
+                <div style="color: black; margin-bottom: 12px; font-size: 0.95em; line-height: 1.4;">
+                    <div>Last Time (${formattedDate})</div>
+                    ${setDetailsHTML}
+                </div>
+            `;
+        }
 
         const div = document.createElement('div');
         div.className = 'exercise';
@@ -905,14 +1126,10 @@ function renderActiveWorkout() {
                        cursor: pointer; font-weight: bold;">Delete</button>
             </div>
 
-            <div style="font-size: 0.85em; color: #666; margin-bottom: 10px;">
-                Target: ${ex.target_sets || 0} x ${ex.target_reps || 0}
-            </div>
-
-            ${historyHTML}
+            ${lastTimeHTML}
 
             <textarea 
-                placeholder="Add a note (e.g. 'felt heavy')" 
+                placeholder="${placeholderText}" 
                 oninput="updateActiveNote(${exIdx}, this.value)"
                 style="width: 100%; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; padding: 8px; font-family: inherit; font-size: 14px; box-sizing: border-box;">${ex.note || ''}</textarea>
 
@@ -927,9 +1144,9 @@ function renderActiveWorkout() {
             const targetReps = parseInt(set.reps) || ex.target_reps || 10;
             
             // Server-stored 45-day estimated 1RM for light-grey suggestion
-            const estimatedOneRM = exerciseStats[ex.name] || null;
+            const estimatedOneRM = getEstimated1RM(ex.name);
             const suggested = estimatedOneRM 
-                ? Math.round(estimatedOneRM * (1 - (targetReps * 0.025))) 
+                ? Math.round(estimatedOneRM / (1 + targetReps / 30)) 
                 : null;
 
             const row = document.createElement('div');
@@ -937,6 +1154,7 @@ function renderActiveWorkout() {
             row.innerHTML = `
                 <span style="font-size: 0.9em; color: #666; margin-right: 5px;">Set ${setIdx+1}</span>
                 <input type="text" 
+                       id="weight-input-${exIdx}-${setIdx}"
                        placeholder="${suggested || 'lbs'}" 
                        value="${set.weight || ''}" 
                        oninput="updateSet(${exIdx},${setIdx},'weight',this.value)" 
@@ -970,7 +1188,7 @@ function addNewExerciseToActive() {
     
     currentWorkout.exercises.push({
         name: name,
-        sets: [{reps: 0, weight: 0}] // Start with one empty set
+        sets: [{reps: 10, weight: ''}] // Start with one predicted set
     });
     
     // Save to backup immediately so it's crash-proof
@@ -986,10 +1204,19 @@ function updateSet(e, s, f, v) {
     if (f === 'weight') {
         set[f] = v.toLowerCase() === 'bw' ? 'BW' : parseFloat(v) || 0;
     } else if (f === 'reps') {
-        set[f] = parseInt(v) || 0;
-        // Reps changed → re-render so all suggestions update live
-        renderActiveWorkout();
-        return; // skip the normal save below
+            const newReps = parseInt(v) || 0;
+            set[f] = newReps;
+            
+            // Auto-update the suggested weight placeholder
+            const weightInput = document.getElementById(`weight-input-${e}-${s}`);
+            if (weightInput) {
+                const estimatedOneRM = getEstimated1RM(exercise.name);
+                if (estimatedOneRM && newReps > 0) {
+                    weightInput.placeholder = Math.round(estimatedOneRM / (1 + newReps / 30));
+                } else {
+                    weightInput.placeholder = 'lbs';
+                }
+            }
     }
 
     // Save backup
@@ -1005,7 +1232,12 @@ function updateActiveNote(exIdx, val) {
     }
 }
 
-function addSet(i) { currentWorkout.exercises[i].sets.push({reps:0, weight:0}); renderActiveWorkout(); }
+function addSet(i) { 
+    const ex = currentWorkout.exercises[i];
+    const reps = ex.target_reps || 10;
+    ex.sets.push({reps: reps, weight: ''}); 
+    renderActiveWorkout(); 
+}
 function removeSet(e, s) { currentWorkout.exercises[e].sets.splice(s, 1); renderActiveWorkout(); }
 
 async function finishWorkout() {
@@ -1107,9 +1339,9 @@ function renderTemplateExerciseList() {
     if (!container) return;
 
     container.innerHTML = currentTemplateExercises.map((ex, index) => `
-        <div style="display: flex; justify-content: space-between; background: #fff; padding: 10px; margin-bottom: 5px; border-radius: 5px; border: 1px solid #eee;">
-            <span><strong>${ex.name}</strong> (${ex.muscleGroup || 'General'})</span>
-            <button onclick="removeExerciseFromNewTemplate(${index})" style="background: none; color: #ff3b30; width: auto; padding: 0; border: none;">✕</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #1c1c1e; padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid; border-image: linear-gradient(135deg, #39ff14, #ff107a, #b026ff, #ff5e00) 1; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
+            <span style="color: #e0e0e0;"><strong style="color: #fff;">${ex.name}</strong> <span style="color: #888; font-size: 0.9em;">(${ex.muscleGroup || 'General'})</span></span>
+            <button onclick="removeExerciseFromNewTemplate(${index})" style="background: none !important; color: #ff3b30 !important; width: auto; padding: 4px 8px !important; border: none !important; box-shadow: none !important; font-size: 1.1em; min-width: 0;">✕</button>
         </div>
     `).join('');
 }
@@ -1275,6 +1507,17 @@ async function processCSVRows(rows) {
     location.reload();
 }
 
+// Helper to assign neon theme colors based on workout name
+function getWorkoutColor(wk) {
+    const wkName = (wk.name || "").toLowerCase();
+    if (isCardioWorkout(wk) && !hasStrengthExercises(wk)) return '#ff5e00'; // Neon Orange
+    if (wkName.includes('chest')) return '#ff107a'; // Neon Pink
+    if (wkName.includes('leg')) return '#b026ff'; // Neon Purple
+    if (wkName.includes('back') && !wkName.includes('chest')) return '#39ff14'; // Neon Green
+    if (wkName.includes('shoulder') || wkName.includes('bis') || wkName.includes('bicep') || wkName.includes('tri') || wkName.includes('arm')) return '#00e5ff'; // Neon Cyan
+    return '#007aff'; // Default Neon Blue
+}
+
 function filterHistory(category) {
     const searchInput = document.getElementById('history-search');
     if (searchInput) {
@@ -1342,33 +1585,46 @@ function renderHistory() {
         div.className = 'exercise';
         
         const isCardio = isCardioWorkout(wk) && !hasStrengthExercises(wk);
-        div.style.borderLeft = isCardio ? "5px solid #FC6100" : "5px solid #34c759";
+        
+        // Apply dynamic neon theme colors, borders, and shadows to the card
+        const themeColor = getWorkoutColor(wk);
+        div.style.setProperty('border', `1px solid ${themeColor}`, 'important');
+        div.style.setProperty('box-shadow', `0 8px 25px rgba(0,0,0,0.6), 0 0 12px ${themeColor}40`, 'important');
+        div.style.setProperty('border-left', `4px solid ${themeColor}`, 'important');
         
         const metrics = normalizeWatchMetrics(wk);
 
         const cardioStats = renderWatchMetricGrid(metrics, isCardio);
 
         const exHTML = (wk.exercises || []).map(ex => {
-            const noteHTML = ex.note ? `<div style="color:#666; font-style:italic; font-size:12px; margin-top:2px;">📝 ${ex.note}</div>` : '';
+            const noteHTML = ex.note ? `<div style="color:#888; font-style:italic; font-size:12px; margin-top:4px;">📝 ${ex.note}</div>` : '';
+            
+            // Upgrade sets string into clean, dimmed out readable pills
+            const setsHTML = (ex.sets || []).map(s => {
+                const wStr = String(s.weight).toUpperCase();
+                const displayWeight = (wStr === 'BW' || wStr === '0') ? 'BW' : s.weight + 'lbs';
+                return `<span style="display:inline-block; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); padding:3px 8px; border-radius:6px; margin:3px 4px 0 0; font-size:12px; color:#ccc; text-shadow: 1px 1px 1px #000;">${displayWeight} × ${s.reps}</span>`;
+            }).join('');
+
             return `
-                <div style="margin-bottom:10px;">
-                    <strong>${ex.name || "Unknown"}</strong> 
+                <div style="margin-bottom:12px;">
+                    <strong style="color:#fff; letter-spacing:0.5px;">${ex.name || "Unknown"}</strong> 
                     ${noteHTML}
-                    <div style="padding-left:10px;">
-                        <small style="color:#444;">${(ex.sets || []).map(s => s.weight + 'lb x ' + s.reps).join(', ')}</small>
+                    <div style="margin-top:4px;">
+                        ${setsHTML}
                     </div>
                 </div>`;
         }).join('');
 
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <div>
-                    <h3 onclick="renameHistoryItem(${idx})" style="color:#007aff; cursor:pointer; margin:0;">${wk.name || "Unnamed Workout"} ✏️</h3>
-                    <small>${wk.date || "No Date"}</small>
+                    <h3 onclick="renameHistoryItem(${idx})" style="color:${themeColor}; text-shadow: 0 0 8px ${themeColor}60, 1px 1px 2px #000; cursor:pointer; margin:0; font-size: 1.3em;">${wk.name || "Unnamed Workout"} ✏️</h3>
+                    <small style="color:#888;">${wk.date || "No Date"}</small>
                 </div>
-                <button onclick="deleteWorkout('${wk.date}', '${wk.name}')" style="background:none; color:#ff3b30; border:none; width:auto; font-size:14px;">Delete</button>
+                <button onclick="deleteWorkout('${wk.date}', '${wk.name}')" style="background:rgba(255,59,48,0.1) !important; color:#ff3b30 !important; border:1px solid rgba(255,59,48,0.3) !important; box-shadow:none !important; border-bottom:1px solid rgba(255,59,48,0.3) !important; width:auto; font-size:12px; padding:6px 10px; border-radius:8px; text-shadow:none !important;">Delete</button>
             </div>
-            <hr style="border:0; border-top:1px solid #eee; margin:10px 0;">
+            <hr style="border:0; border-top:1px solid #333; margin:12px 0;">
             ${cardioStats}
             ${exHTML}
         `;
@@ -1940,31 +2196,384 @@ function showProgressTab(tab) {
         renderHistory();
     } else if (tab === 'exercises') {
         if (typeof renderReports === 'function') renderReports();
+        populateProgressExerciseSelector();
     }
+}
+
+let progressChartInstance = null;
+
+function populateProgressExerciseSelector() {
+    const sel = document.getElementById('progress-exercise-select');
+    if (!sel) return;
+    const names = [...new Set(
+        workouts.flatMap(w => (w.exercises || []).map(e => e.name).filter(Boolean))
+    )].sort();
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— select an exercise —</option>' +
+        names.map(n => `<option value="${encodeURIComponent(n)}"${encodeURIComponent(n) === current ? ' selected' : ''}>${n}</option>`).join('');
+    if (current) renderProgressChart();
+}
+
+async function renderProgressChart() {
+    const sel = document.getElementById('progress-exercise-select');
+    const canvas = document.getElementById('progress-chart');
+    if (!sel || !canvas) return;
+
+    const encoded = sel.value;
+    if (!canvas.getContext) return;
+
+    if (progressChartInstance) {
+        progressChartInstance.destroy();
+        progressChartInstance = null;
+    }
+
+    if (!encoded) return;
+
+    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+    let rows = [];
+    try {
+        const res = await fetch(`/api/progress/${encoded}`, { headers: { Authorization: `Bearer ${token}` } });
+        rows = await res.json();
+    } catch (e) {
+        console.warn('Progress chart fetch failed:', e);
+        return;
+    }
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No history yet — log a workout to start tracking.', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    const labels = rows.map(r => r.date);
+    const values = rows.map(r => r.estimated_1rm);
+
+    // Simple linear regression trend line via least-squares
+    let trendData = null;
+    if (rows.length >= 3 && typeof window.ss !== 'undefined') {
+        const xVals = rows.map((_, i) => i);
+        const m = window.ss.linearRegressionLine(window.ss.linearRegression(xVals.map((x, i) => [x, values[i]])));
+        trendData = xVals.map(x => Math.round(m(x)));
+    }
+
+    const datasets = [{
+        label: 'Est. 1RM (lbs)',
+        data: values,
+        borderColor: '#007aff',
+        backgroundColor: 'rgba(0,122,255,0.12)',
+        tension: 0.3,
+        pointRadius: 4,
+        fill: true,
+    }];
+
+    if (trendData) {
+        datasets.push({
+            label: 'Trend',
+            data: trendData,
+            borderColor: 'rgba(255,94,0,0.7)',
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+        });
+    }
+
+    progressChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#333' } } },
+            scales: {
+                x: { ticks: { maxTicksLimit: 8, color: '#666' } },
+                y: { ticks: { color: '#666' }, title: { display: true, text: 'lbs', color: '#666' } }
+            }
+        }
+    });
 }
 
 // Call it when page loads
 window.addEventListener('load', addAdminRestartButton);
 
-window.onload = () => { 
-    loadExerciseStats();   // ← add this line
+window.onload = () => {
+    loadExerciseStats();
     if (!initializeSessionTimer()) return;
 
+    // Handle ?strava= redirect after OAuth
+    const urlParams = new URLSearchParams(window.location.search);
+    const stravaResult = urlParams.get('strava');
+    if (stravaResult) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        if (stravaResult === 'connected') {
+            setTimeout(() => {
+                showSection('settings');
+                // small delay so settings renders first
+                setTimeout(() => {
+                    if (typeof showSettingsTab === 'function') showSettingsTab('account');
+                }, 50);
+                alert('✅ Strava connected successfully!');
+            }, 300);
+        } else if (stravaResult === 'error') {
+            alert('❌ Could not connect Strava. Please try again.');
+        }
+    }
+
     const backup = localStorage.getItem('active_workout_backup');
-    
     if (backup) {
         currentWorkout = JSON.parse(backup);
         showSection('log');
         renderActiveWorkout();
-    } else {
+    } else if (!stravaResult) {
         showSection('dashboard');
     }
 
-    // Force clean sync on load
     cleanupDuplicates();
     syncFromPi();
     syncTemplates();
+    checkStravaStatus();
+    loadAppleHealthTokenStatus();
 };
 
 // Run the sync as soon as the page loads
 window.addEventListener('load', syncFromPi);
+
+// ==================== STRAVA PER-USER CONNECTION ====================
+
+async function connectStrava() {
+    // Fetch the redirect URL from the server (needs auth header), then follow it
+    try {
+        const res = await fetch('/api/strava/connect', {
+            headers: getAuthHeader(),
+            redirect: 'manual'   // don't auto-follow — we want the Location header
+        });
+        // Server returns 302; browser won't follow cross-origin redirects manually,
+        // so the server instead returns the URL as JSON when redirect=manual isn't fully supported
+        if (res.type === 'opaqueredirect' || res.status === 0) {
+            // Some browsers still follow — if we're already going to Strava this is fine
+            return;
+        }
+        const data = await res.json();
+        if (data.url) window.location.href = data.url;
+    } catch (e) {
+        console.error('Strava connect error', e);
+    }
+}
+
+async function checkStravaStatus() {
+    try {
+        const res = await fetch('/api/strava/status', { headers: getAuthHeader() });
+        if (!res.ok) return;
+        const data = await res.json();
+        updateStravaUI(data.connected, data.name);
+    } catch (e) { /* silent */ }
+}
+
+function updateStravaUI(connected, athleteName) {
+    const btn = document.getElementById('strava-connect-btn');
+    const statusEl = document.getElementById('strava-status-display');
+    const syncHint = document.getElementById('strava-sync-hint');
+    const syncBtn = document.getElementById('strava-sync-btn');
+
+    if (connected) {
+        if (btn) {
+            btn.textContent = '✅ Strava Connected';
+            btn.style.background = '#34c759';
+            btn.onclick = null;
+            btn.style.cursor = 'default';
+        }
+        if (statusEl) statusEl.textContent = athleteName ? `Connected as ${athleteName}` : 'Account connected';
+        if (syncHint) syncHint.style.display = 'none';
+        if (syncBtn) { syncBtn.style.background = '#fc4c02'; syncBtn.style.opacity = '1'; }
+    } else {
+        if (statusEl) statusEl.textContent = 'Not connected';
+        if (syncHint) syncHint.style.display = 'block';
+        if (syncBtn) { syncBtn.style.opacity = '0.5'; }
+    }
+}
+
+// ==================== ADMIN: INVITE KEY GENERATION ====================
+
+function isOwner() {
+    const token = localStorage.getItem('liftlog_token');
+    if (!token) return false;
+    try {
+        const p = JSON.parse(atob(token.split('.')[1]));
+        return p.user_id === 75001 || p.user === 'noah';
+    } catch(e) { return false; }
+}
+
+window.addEventListener('load', () => {
+    if (isOwner()) {
+        const card = document.getElementById('admin-invite-card');
+        if (card) card.style.display = 'block';
+    }
+});
+
+async function generateInviteKey() {
+    const btn = document.getElementById('generate-invite-btn');
+    const resultDiv = document.getElementById('invite-result');
+    const tokenDisplay = document.getElementById('invite-token-display');
+    const expiryMsg = document.getElementById('invite-expiry-msg');
+
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    try {
+        const res = await fetch('/api/invites/generate', {
+            method: 'POST',
+            headers: getAuthHeader()
+        });
+        if (!res.ok) { alert('Failed to generate key'); return; }
+        const data = await res.json();
+        tokenDisplay.textContent = data.token;
+        expiryMsg.textContent = `Expires: ${new Date(data.expiresAt).toLocaleString()}`;
+        resultDiv.style.display = 'block';
+    } catch(e) {
+        alert('Error reaching server');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate New Invite Key';
+    }
+}
+
+function copyInviteKey() {
+    const token = document.getElementById('invite-token-display').textContent.trim();
+    if (!token) return;
+    navigator.clipboard.writeText(token)
+        .then(() => alert('Copied to clipboard!'))
+        .catch(() => alert('Select the key and copy manually'));
+}
+
+// ==================== APPLE HEALTH IMPORT ====================
+
+async function loadAppleHealthTokenStatus() {
+    try {
+        const res = await fetch('/api/apple-health/token-status', { headers: getAuthHeader() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.token) {
+            document.getElementById('ah-token-section').style.display = 'block';
+            document.getElementById('ah-token-text').textContent = data.token;
+            const baseUrl = window.location.origin;
+            document.getElementById('ah-endpoint-url').textContent = `${baseUrl}/api/apple-health/import?token=${data.token}`;
+            const lastEl = document.getElementById('ah-last-import-text');
+            if (data.lastImport) {
+                lastEl.textContent = `Last import: ${new Date(data.lastImport + 'Z').toLocaleString()}`;
+            } else {
+                lastEl.textContent = 'No imports yet';
+            }
+        }
+    } catch(e) { /* silent */ }
+}
+
+async function generateAppleHealthToken() {
+    const btn = document.getElementById('ah-generate-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    try {
+        const res = await fetch('/api/apple-health/generate-token', {
+            method: 'POST',
+            headers: getAuthHeader()
+        });
+        if (!res.ok) { alert('Failed to generate token'); return; }
+        const data = await res.json();
+        document.getElementById('ah-token-section').style.display = 'block';
+        document.getElementById('ah-token-text').textContent = data.token;
+        const baseUrl = window.location.origin;
+        document.getElementById('ah-endpoint-url').textContent = `${baseUrl}/api/apple-health/import?token=${data.token}`;
+        document.getElementById('ah-last-import-text').textContent = 'No imports yet';
+    } catch(e) {
+        alert('Error reaching server');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Regenerate Token';
+    }
+}
+
+function copyAppleHealthToken() {
+    const token = document.getElementById('ah-token-text').textContent.trim();
+    if (!token) return;
+    navigator.clipboard.writeText(token)
+        .then(() => alert('Token copied!'))
+        .catch(() => alert('Select the token and copy manually'));
+}
+
+async function uploadAppleHealthFile() {
+    const fileInput = document.getElementById('ah-upload-file');
+    const statusEl  = document.getElementById('ah-upload-status');
+    const file = fileInput.files[0];
+    if (!file) { alert('Please select a JSON file first'); return; }
+
+    statusEl.style.display    = 'block';
+    statusEl.style.background = '#e0f0ff';
+    statusEl.style.color      = '#0066cc';
+    statusEl.textContent      = '⏳ Parsing and uploading...';
+
+    try {
+        const text = await file.text();
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch(parseErr) {
+            statusEl.style.background = '#f8d7da';
+            statusEl.style.color      = '#721c24';
+            statusEl.textContent      = `❌ Invalid JSON: ${parseErr.message}`;
+            return;
+        }
+
+        // Strip per-sample time-series arrays that HAE includes but we never use.
+        // These can balloon the export to hundreds of MB — drop them before upload.
+        const STRIP_KEYS = new Set(['heartRate', 'heartRateData', 'activeEnergy', 'vo2Max',
+                                    'respiratoryRate', 'runningPower', 'groundContactTime',
+                                    'stepLength', 'verticalOscillation', 'strideLength']);
+        const stripWorkout = w => {
+            const out = {};
+            for (const k of Object.keys(w)) {
+                if (!STRIP_KEYS.has(k)) out[k] = w[k];
+            }
+            return out;
+        };
+        if (json?.data?.workouts)  json.data.workouts  = json.data.workouts.map(stripWorkout);
+        else if (json?.workouts)   json.workouts        = json.workouts.map(stripWorkout);
+
+        const res  = await fetch('/api/apple-health/upload', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body:    JSON.stringify(json)
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            const merged = data.workoutsMatchedAndUpdated || 0;
+            const sp = data.sampleParsedWorkout;
+            const sampleLine = sp
+                ? `<br><span style="font-size:11px; color:#555;">Sample: ${sp.start} → ${sp.duration ?? sp.durationMinutes}min, ${sp.calories}cal, HR ${sp.hr ?? sp.avgHeartRate}/${sp.maxHr ?? sp.maxHeartRate}</span>`
+                : '';
+            statusEl.style.background = merged > 0 ? '#d4edda' : '#fff3cd';
+            statusEl.style.color      = merged > 0 ? '#155724' : '#856404';
+            statusEl.innerHTML = `
+                <strong>${merged > 0 ? '✅' : '⚠️'} ${data.message}</strong><br>
+                Processed: ${data.workoutsProcessed} total<br>
+                Merged into existing: <strong>${merged}</strong><br>
+                Skipped (no match): ${data.workoutsSkippedNoMatch ?? 0}<br>
+                Skipped (before 2026): ${data.workoutsSkippedOld ?? 0}
+                ${sampleLine}
+            `;
+            if (merged > 0) {
+                fileInput.value = '';
+                await syncFromPi();
+            }
+        } else {
+            statusEl.style.background = '#f8d7da';
+            statusEl.style.color      = '#721c24';
+            statusEl.textContent      = `❌ ${data.error || 'Upload failed'}`;
+        }
+    } catch(e) {
+        statusEl.style.background = '#f8d7da';
+        statusEl.style.color      = '#721c24';
+        statusEl.textContent      = `❌ ${e.message}`;
+    }
+}
